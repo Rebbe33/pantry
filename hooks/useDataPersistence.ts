@@ -7,7 +7,7 @@ import toast from 'react-hot-toast'
 
 // Hook pour charger et synchroniser les données depuis Supabase
 export function useDataPersistence() {
-  const { setPantryItems, setRecipes, setMenuItems, setIsLoading } = useStore()
+  const { setPantryItems, setRecipes, setMenuItems, setCustomShoppingItems, setIsLoading } = useStore()
   const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
@@ -47,10 +47,22 @@ export function useDataPersistence() {
       )
       .subscribe()
 
+    const customShoppingChannel = supabase
+      .channel('custom-shopping-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'pantry_custom_shopping_items' },
+        (payload) => {
+          console.log('Custom shopping changed:', payload)
+          loadCustomShoppingItems()
+        }
+      )
+      .subscribe()
+
     return () => {
       supabase.removeChannel(pantryChannel)
       supabase.removeChannel(recipesChannel)
       supabase.removeChannel(menuChannel)
+      supabase.removeChannel(customShoppingChannel)
     }
   }, [])
 
@@ -61,6 +73,7 @@ export function useDataPersistence() {
         loadPantryItems(),
         loadRecipes(),
         loadMenuItems(),
+        loadCustomShoppingItems(),
       ])
       setIsInitialized(true)
     } catch (error) {
@@ -110,6 +123,20 @@ export function useDataPersistence() {
     }
 
     setMenuItems(data || [])
+  }
+
+  const loadCustomShoppingItems = async () => {
+    const { data, error } = await supabase
+      .from('pantry_custom_shopping_items')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error loading custom shopping items:', error)
+      return
+    }
+
+    setCustomShoppingItems(data || [])
   }
 
   return { isInitialized }
