@@ -359,7 +359,7 @@ export default function ShoppingTab() {
                   `}
                 >
                   <div 
-                    onClick={() => toggleCheck(item)}
+                    onClick={() => toggleCheckCustom(item)}
                     className={`
                       w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all
                       ${isChecked 
@@ -372,7 +372,7 @@ export default function ShoppingTab() {
                   </div>
 
                   <div 
-                    onClick={() => toggleCheck(item)}
+                    onClick={() => toggleCheckCustom(item)}
                     className={`flex-1 font-medium ${isChecked ? 'line-through text-gray-500' : 'text-gray-900 dark:text-white'}`}
                   >
                     {item}
