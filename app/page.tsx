@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useStore } from '@/lib/store'
+import { useDataPersistence } from '@/hooks/useDataPersistence'
 import { 
   ChefHat, 
   ShoppingCart, 
@@ -14,6 +15,7 @@ import {
   Plus,
   Settings,
   Sparkles,
+  Loader,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import PantryTab from '@/components/tabs/PantryTab'
@@ -34,8 +36,9 @@ const tabs = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('pantry')
-  const { isDark, toggleTheme, pantryItems } = useStore()
+  const { isDark, toggleTheme, pantryItems, isLoading } = useStore()
   const [mounted, setMounted] = useState(false)
+  const { isInitialized } = useDataPersistence()
 
   useEffect(() => {
     setMounted(true)
@@ -49,6 +52,18 @@ export default function Home() {
 
   if (!mounted) {
     return null
+  }
+
+  // Loading state
+  if (isLoading || !isInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="w-12 h-12 animate-spin text-orange-500 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Chargement...</p>
+        </div>
+      </div>
+    )
   }
 
   const expiredCount = pantryItems.filter(item => {
@@ -70,36 +85,36 @@ export default function Home() {
         animate={{ y: 0, opacity: 1 }}
         className="sticky top-0 z-50 glass-strong shadow-lg"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 sm:h-20">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
+          <div className="flex items-center justify-between h-14 sm:h-16 lg:h-20">
             {/* Logo */}
             <motion.div 
-              className="flex items-center gap-3"
+              className="flex items-center gap-2 sm:gap-3"
               whileHover={{ scale: 1.02 }}
             >
               <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-amber-500 rounded-2xl blur-sm opacity-75" />
-                <div className="relative bg-gradient-to-br from-orange-500 to-amber-600 p-2.5 sm:p-3 rounded-2xl shadow-glow">
-                  <ChefHat className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-amber-500 rounded-xl sm:rounded-2xl blur-sm opacity-75" />
+                <div className="relative bg-gradient-to-br from-orange-500 to-amber-600 p-1.5 sm:p-2.5 lg:p-3 rounded-xl sm:rounded-2xl shadow-glow">
+                  <ChefHat className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
               </div>
               <div>
-                <h1 className="font-playfair text-lg sm:text-2xl font-bold text-gradient">
+                <h1 className="font-playfair text-sm sm:text-lg lg:text-2xl font-bold text-gradient">
                   Mon Garde-Manger
                 </h1>
-                <p className="text-xs text-gray-600 dark:text-gray-400 hidden sm:block">
+                <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 hidden sm:block">
                   {pantryItems.length} produits en stock
                 </p>
               </div>
             </motion.div>
 
             {/* Actions */}
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3">
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={toggleTheme}
-                className="p-2 sm:p-2.5 rounded-xl glass hover:shadow-glow transition-all"
+                className="p-1.5 sm:p-2 lg:p-2.5 rounded-lg sm:rounded-xl glass hover:shadow-glow transition-all"
               >
                 {isDark ? (
                   <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
@@ -111,7 +126,7 @@ export default function Home() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-glow hover:shadow-glow-strong transition-all"
+                className="hidden md:flex items-center gap-2 px-3 lg:px-4 py-2 lg:py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg sm:rounded-xl shadow-glow hover:shadow-glow-strong transition-all text-sm lg:text-base"
               >
                 <Settings className="w-4 h-4" />
                 <span className="font-medium">Paramètres</span>
@@ -119,8 +134,8 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex gap-1 overflow-x-auto pb-0 scrollbar-hide">
+          {/* Navigation Tabs - Scrollable on mobile */}
+          <div className="flex gap-0.5 sm:gap-1 overflow-x-auto pb-0 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
             {tabs.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -130,8 +145,8 @@ export default function Home() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`
-                    relative flex items-center gap-2 px-3 sm:px-4 py-3 rounded-t-xl font-medium text-sm
-                    transition-all whitespace-nowrap
+                    relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 lg:px-4 py-2.5 sm:py-3 rounded-t-lg sm:rounded-t-xl font-medium text-xs sm:text-sm
+                    transition-all whitespace-nowrap flex-shrink-0
                     ${isActive 
                       ? 'text-orange-600 dark:text-orange-400' 
                       : 'text-gray-600 dark:text-gray-400 hover:text-orange-500 dark:hover:text-orange-300'
@@ -140,11 +155,11 @@ export default function Home() {
                   whileHover={{ y: -2 }}
                   whileTap={{ y: 0 }}
                 >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
+                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden xs:inline sm:inline">{tab.label}</span>
                   
                   {tab.id === 'pantry' && expiredCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg">
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] sm:text-xs font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center shadow-lg">
                       {expiredCount}
                     </span>
                   )}
@@ -164,7 +179,7 @@ export default function Home() {
       </motion.header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -189,9 +204,9 @@ export default function Home() {
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
-        className="sm:hidden fixed bottom-6 right-6 p-4 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-full shadow-glow-strong z-40"
+        className="md:hidden fixed bottom-4 right-4 sm:bottom-6 sm:right-6 p-3 sm:p-4 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-full shadow-glow-strong z-40"
       >
-        <Plus className="w-6 h-6" />
+        <Plus className="w-5 h-5 sm:w-6 sm:h-6" />
       </motion.button>
     </div>
   )
