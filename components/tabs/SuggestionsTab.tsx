@@ -1,12 +1,37 @@
 'use client'
 
-import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@/lib/store'
-import { Sparkles, Clock, Users, AlertCircle, Lightbulb } from 'lucide-react'
+import { convertUnit, suggestBestUnit, formatConversion } from '@/lib/conversions'
+import { Sparkles, Clock, Users, AlertCircle, Lightbulb, Globe, ArrowRightLeft, Loader } from 'lucide-react'
 import { differenceInDays } from 'date-fns'
+import toast from 'react-hot-toast'
+
+interface OnlineRecipe {
+  name: string
+  description?: string
+  duration: number
+  servings: number
+  tags: string[]
+  source_url?: string
+  image_url?: string
+  matchScore: number
+}
 
 export default function SuggestionsTab() {
   const { recipes, pantryItems } = useStore()
+  const [showConverter, setShowConverter] = useState(false)
+  const [showOnlineRecipes, setShowOnlineRecipes] = useState(false)
+  const [onlineRecipes, setOnlineRecipes] = useState<OnlineRecipe[]>([])
+  const [loadingOnline, setLoadingOnline] = useState(false)
+  
+  // Converter state
+  const [convValue, setConvValue] = useState('100')
+  const [convFromUnit, setConvFromUnit] = useState('g')
+  const [convToUnit, setConvToUnit] = useState('ml')
+  const [convIngredient, setConvIngredient] = useState('eau')
+  const [convResult, setConvResult] = useState<string | null>(null)
 
   // Calculate recipe score based on available ingredients
   const scoredRecipes = recipes.map(recipe => {
@@ -49,10 +74,284 @@ export default function SuggestionsTab() {
   )
 
   const perfectMatches = scoredRecipes.filter(r => r.score === 100)
-  const partialMatches = scoredRecipes.filter(r => r.score >= 60 && r.score < 100)
+
+  // Fetch online recipes
+  const fetchOnlineRecipes = async () => {
+    setLoadingOnline(true)
+    try {
+      const availableIngredients = pantryItems.map(item => item.name)
+      
+      const response = await fetch('/api/search-online-recipes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingredients: availableIngredients }),
+      })
+
+      if (!response.ok) throw new Error('Failed to fetch')
+
+      const data = await response.json()
+      setOnlineRecipes(data.recipes || [])
+      setShowOnlineRecipes(true)
+      
+      if (data.source === 'fallback') {
+        toast('Suggestions basiques générées (configurez Edamam API pour plus de résultats)', { icon: '💡' })
+      } else {
+        toast.success(`${data.recipes.length} recettes trouvées en ligne !`)
+      }
+    } catch (error) {
+      toast.error('Impossible de charger les recettes en ligne')
+    } finally {
+      setLoadingOnline(false)
+    }
+  }
+
+  // Handle conversion
+  const handleConvert = () => {
+    const value = parseFloat(convValue)
+    if (isNaN(value)) {
+      toast.error('Valeur invalide')
+      return
+    }
+
+    const result = convertUnit(value, convFromUnit, convToUnit, convIngredient)
+    if (result) {
+      setConvResult(formatConversion(result))
+      toast.success('Conversion effectuée !')
+    } else {
+      setConvResult(null)
+      toast.error('Conversion impossible avec ces unités')
+    }
+  }
 
   return (
     <div className="space-y-6">
+      {/* Action Buttons */}
+      <div className="flex flex-wrap gap-3">
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => setShowConverter(!showConverter)}
+          className="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl shadow-glow hover:shadow-glow-strong transition-all flex items-center gap-2 font-medium"
+        >
+          <ArrowRightLeft className="w-5 h-5" />
+          Convertisseur
+        </motion.button>
+
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={fetchOnlineRecipes}
+          disabled={loadingOnline}
+          className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-xl shadow-glow hover:shadow-glow-strong transition-all flex items-center gap-2 font-medium disabled:opacity-50"
+        >
+          {loadingOnline ? (
+            <Loader className="w-5 h-5 animate-spin" />
+          ) : (
+            <Globe className="w-5 h-5" />
+          )}
+          Chercher sur Internet
+        </motion.button>
+      </div>
+
+      {/* Converter */}
+      <AnimatePresence>
+        {showConverter && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="glass p-6 rounded-2xl"
+          >
+            <h3 className="font-playfair font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <ArrowRightLeft className="w-5 h-5 text-purple-600" />
+              Convertisseur intelligent
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Ingrédient
+                </label>
+                <input
+                  type="text"
+                  value={convIngredient}
+                  onChange={(e) => setConvIngredient(e.target.value)}
+                  placeholder="Ex: eau, farine, tomate..."
+                  className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Valeur
+                </label>
+                <input
+                  type="number"
+                  value={convValue}
+                  onChange={(e) => setConvValue(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  De
+                </label>
+                <select
+                  value={convFromUnit}
+                  onChange={(e) => setConvFromUnit(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                >
+                  <option value="g">Grammes (g)</option>
+                  <option value="kg">Kilogrammes (kg)</option>
+                  <option value="ml">Millilitres (ml)</option>
+                  <option value="l">Litres (L)</option>
+                  <option value="cl">Centilitres (cl)</option>
+                  <option value="pièce(s)">Pièce(s)</option>
+                  <option value="cuillère à soupe">Cuillère à soupe</option>
+                  <option value="cuillère à café">Cuillère à café</option>
+                  <option value="tasse">Tasse</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Vers
+                </label>
+                <select
+                  value={convToUnit}
+                  onChange={(e) => setConvToUnit(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                >
+                  <option value="g">Grammes (g)</option>
+                  <option value="kg">Kilogrammes (kg)</option>
+                  <option value="ml">Millilitres (ml)</option>
+                  <option value="l">Litres (L)</option>
+                  <option value="cl">Centilitres (cl)</option>
+                  <option value="pièce(s)">Pièce(s)</option>
+                  <option value="cuillère à soupe">Cuillère à soupe</option>
+                  <option value="cuillère à café">Cuillère à café</option>
+                  <option value="tasse">Tasse</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleConvert}
+                className="px-6 py-2.5 bg-purple-500 text-white rounded-xl font-medium hover:bg-purple-600 transition-colors"
+              >
+                Convertir
+              </motion.button>
+
+              {convResult && (
+                <div className="flex-1 px-4 py-2.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl">
+                  <span className="text-purple-900 dark:text-purple-100 font-semibold">
+                    Résultat : {convResult}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+              💡 La conversion utilise les densités réelles des ingrédients pour une précision maximale
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Online Recipes */}
+      <AnimatePresence>
+        {showOnlineRecipes && onlineRecipes.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="glass p-6 rounded-2xl"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                  <Globe className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white">
+                  Recettes trouvées en ligne
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowOnlineRecipes(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {onlineRecipes.map((recipe, index) => (
+                <motion.a
+                  key={index}
+                  href={recipe.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="glass p-4 rounded-xl hover:shadow-glow transition-all group cursor-pointer border border-blue-200 dark:border-blue-800"
+                >
+                  {recipe.image_url && (
+                    <img
+                      src={recipe.image_url}
+                      alt={recipe.name}
+                      className="w-full h-32 object-cover rounded-lg mb-3"
+                    />
+                  )}
+                  
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    {recipe.name}
+                  </h3>
+                  
+                  {recipe.description && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
+                      {recipe.description}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {recipe.duration}min
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" />
+                      {recipe.servings}p
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap gap-1">
+                      {recipe.tags.slice(0, 2).map(tag => (
+                        <span
+                          key={tag}
+                          className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                      {Math.round(recipe.matchScore)}% match
+                    </span>
+                  </div>
+                </motion.a>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Rest of the existing suggestions code... */}
       {/* Expiring Soon */}
       {useExpiringRecipes.length > 0 && (
         <motion.div
@@ -169,108 +468,6 @@ export default function SuggestionsTab() {
           </div>
         </div>
       )}
-
-      {/* All Suggestions by Score */}
-      <div>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="p-2.5 bg-orange-100 dark:bg-orange-900/30 rounded-xl">
-            <Lightbulb className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-          </div>
-          <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white">
-            Toutes les suggestions
-          </h2>
-        </div>
-
-        <div className="space-y-3">
-          {scoredRecipes.map((recipe, index) => {
-            const score = recipe.score
-            let gradientClass = 'from-red-500 to-rose-500'
-            let progressColor = 'stroke-red-500'
-            
-            if (score === 100) {
-              gradientClass = 'from-green-500 to-emerald-500'
-              progressColor = 'stroke-green-500'
-            } else if (score >= 75) {
-              gradientClass = 'from-lime-500 to-green-500'
-              progressColor = 'stroke-lime-500'
-            } else if (score >= 50) {
-              gradientClass = 'from-yellow-500 to-amber-500'
-              progressColor = 'stroke-yellow-500'
-            } else if (score >= 25) {
-              gradientClass = 'from-orange-500 to-red-500'
-              progressColor = 'stroke-orange-500'
-            }
-
-            return (
-              <motion.div
-                key={recipe.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.03 }}
-                className="glass p-5 rounded-2xl hover:shadow-lg transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="relative w-20 h-20 flex-shrink-0">
-                    <svg className="w-20 h-20 transform -rotate-90">
-                      <circle
-                        cx="40"
-                        cy="40"
-                        r="36"
-                        stroke="currentColor"
-                        strokeWidth="8"
-                        fill="none"
-                        className="text-gray-200 dark:text-gray-700"
-                      />
-                      <circle
-                        cx="40"
-                        cy="40"
-                        r="36"
-                        strokeWidth="8"
-                        fill="none"
-                        strokeDasharray={`${2 * Math.PI * 36}`}
-                        strokeDashoffset={`${2 * Math.PI * 36 * (1 - recipe.score / 100)}`}
-                        className={`transition-all duration-1000 ${progressColor}`}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className={`text-lg font-bold bg-gradient-to-br ${gradientClass} bg-clip-text text-transparent`}>
-                        {Math.round(recipe.score)}%
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                      {recipe.name}
-                    </h3>
-                    <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-2">
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {recipe.duration}min
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5" />
-                        {recipe.servings}p
-                      </span>
-                    </div>
-                    {recipe.missing.length > 0 && (
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        Manque : {recipe.missing.map(m => m.name).join(', ')}
-                      </div>
-                    )}
-                  </div>
-
-                  {recipe.score === 100 && (
-                    <div className="px-3 py-1.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs font-semibold">
-                      Réalisable
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )
-          })}
-        </div>
-      </div>
 
       {/* Empty State */}
       {scoredRecipes.length === 0 && (
