@@ -72,8 +72,8 @@ export default function ShoppingTab() {
   const toBuy = shoppingList.filter(item => item.needToBuy)
   const inStock = shoppingList.filter(item => !item.needToBuy)
 
-  const totalItems = toBuy.length + customItems.length
-  const checkedCount = checkedItems.size
+  const totalItems = toBuy.length + customShoppingItems.length
+  const checkedCount = customShoppingItems.filter(item => item.is_checked).length
   const progress = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0
 
   const toggleCheck = (item: typeof toBuy[0]) => {
@@ -229,11 +229,11 @@ export default function ShoppingTab() {
       '📋 LISTE DE COURSES\n',
       '─────────────────────',
       '\n📦 Ingrédients nécessaires :',
-      ...toBuy.filter(i => !checkedItems.has(i.name)).map(
+      ...toBuy.map(
         i => `  ☐ ${i.name} — ${i.missing} ${i.unit}`
       ),
-      customItems.length > 0 ? '\n🛍️ Articles personnalisés :' : '',
-      ...customItems.filter(i => !checkedItems.has(i)).map(i => `  ☐ ${i}`),
+      customShoppingItems.filter(i => !i.is_checked).length > 0 ? '\n🛍️ Articles personnalisés :' : '',
+      ...customShoppingItems.filter(i => !i.is_checked).map(i => `  ☐ ${i.name}`),
     ].filter(Boolean).join('\n')
 
     const blob = new Blob([lines], { type: 'text/plain' })
