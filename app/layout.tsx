@@ -1,15 +1,7 @@
-<link rel="manifest" href="/manifest.json" />
-<meta name="theme-color" content="#F16528" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="default" />
-<meta name="apple-mobile-web-app-title" content="Garde-Manger" />
-<link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
 import type { Metadata } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
-import RegisterServiceWorker from './register-sw'
-
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -24,6 +16,21 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: 'Mon Garde-Manger | Gestion intelligente de votre cuisine',
   description: 'Gérez votre garde-manger, planifiez vos repas et créez vos listes de courses en toute simplicité',
+  manifest: '/manifest.json',
+  themeColor: '#F16528',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Garde-Manger',
+  },
+  icons: {
+    apple: '/icons/icon-192x192.png',
+  },
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+  },
 }
 
 export default function RootLayout({
@@ -63,6 +70,5 @@ export default function RootLayout({
         />
       </body>
     </html>
-    <RegisterServiceWorker />
   )
 }
