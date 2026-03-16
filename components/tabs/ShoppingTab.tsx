@@ -451,7 +451,6 @@ export default function ShoppingTab() {
           </p>
         </motion.div>
       )}
-    </div>
 
       {/* Modal de confirmation d'achat */}
       <AnimatePresence>
