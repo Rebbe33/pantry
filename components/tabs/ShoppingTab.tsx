@@ -443,7 +443,7 @@ export default function ShoppingTab() {
       </div>
 
       {/* Empty State */}
-      {toBuy.length === 0 && customItems.length === 0 && (
+      {toBuy.length === 0 && customShoppingItems.length === 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
