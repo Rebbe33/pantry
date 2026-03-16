@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@400;500;600;700;800;900&display=swap');
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-gradient-to-br from-orange-50 via-white to-amber-50 dark:from-gray-950 dark:via-gray-900 dark:to-orange-950;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    transition: background-color 0.3s ease;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl border border-white/20 dark:border-gray-700/30;
+  }
+  
+  .glass-strong {
+    @apply bg-white/80 dark:bg-gray-900/80 backdrop-blur-2xl border border-white/30 dark:border-gray-700/40;
+  }
+  
+  .card-gradient {
+    @apply bg-gradient-to-br from-white via-orange-50/50 to-amber-50 dark:from-gray-900 dark:via-orange-950/30 dark:to-gray-900;
+  }
+  
+  .text-gradient {
+    @apply bg-gradient-to-r from-orange-600 to-amber-600 dark:from-orange-400 dark:to-amber-400 bg-clip-text text-transparent;
+  }
+  
+  .shadow-glow {
+    box-shadow: 0 8px 32px 0 rgba(251, 146, 60, 0.15);
+  }
+  
+  .shadow-glow-strong {
+    box-shadow: 0 12px 48px 0 rgba(251, 146, 60, 0.25);
+  }
+  
+  .button-hover {
+    @apply transition-all duration-200 hover:scale-105 hover:shadow-glow active:scale-95;
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.3),
+      transparent
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  .scroll-fade {
+    mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-orange-300/50 dark:bg-orange-700/50 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-orange-400/70 dark:bg-orange-600/70;
+}
+
+/* Selection */
+::selection {
+  @apply bg-orange-200 dark:bg-orange-900 text-orange-900 dark:text-orange-100;
+}
+
+/* Focus styles */
+*:focus-visible {
+  @apply outline-none ring-2 ring-orange-500 ring-offset-2 dark:ring-offset-gray-900;
+}
