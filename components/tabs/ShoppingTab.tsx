@@ -278,10 +278,10 @@ export default function ShoppingTab() {
       {/* Actions */}
       <div className="glass p-4 rounded-2xl flex items-center justify-between gap-4">
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          {toBuy.length === 0 && customItems.length === 0 ? (
+          {toBuy.length === 0 && customShoppingItems.length === 0 ? (
             <span>Aucun article — planifiez votre menu d'abord</span>
           ) : (
-            <span>{toBuy.length + customItems.length} article{(toBuy.length + customItems.length) > 1 ? 's' : ''}</span>
+            <span>{toBuy.length + customShoppingItems.length} article{(toBuy.length + customShoppingItems.length) > 1 ? 's' : ''}</span>
           )}
         </div>
 
