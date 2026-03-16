@@ -51,14 +51,6 @@ export default function SuggestionsTab() {
   const perfectMatches = scoredRecipes.filter(r => r.score === 100)
   const partialMatches = scoredRecipes.filter(r => r.score >= 60 && r.score < 100)
 
-  const getScoreColor = (score: number) => {
-    if (score === 100) return 'green'
-    if (score >= 75) return 'lime'
-    if (score >= 50) return 'yellow'
-    if (score >= 25) return 'orange'
-    return 'red'
-  }
-
   return (
     <div className="space-y-6">
       {/* Expiring Soon */}
@@ -191,13 +183,22 @@ export default function SuggestionsTab() {
 
         <div className="space-y-3">
           {scoredRecipes.map((recipe, index) => {
-            const scoreColor = getScoreColor(recipe.score)
-            const colorClasses = {
-              green: 'from-green-500 to-emerald-500',
-              lime: 'from-lime-500 to-green-500',
-              yellow: 'from-yellow-500 to-amber-500',
-              orange: 'from-orange-500 to-red-500',
-              red: 'from-red-500 to-rose-500',
+            const score = recipe.score
+            let gradientClass = 'from-red-500 to-rose-500'
+            let progressColor = 'stroke-red-500'
+            
+            if (score === 100) {
+              gradientClass = 'from-green-500 to-emerald-500'
+              progressColor = 'stroke-green-500'
+            } else if (score >= 75) {
+              gradientClass = 'from-lime-500 to-green-500'
+              progressColor = 'stroke-lime-500'
+            } else if (score >= 50) {
+              gradientClass = 'from-yellow-500 to-amber-500'
+              progressColor = 'stroke-yellow-500'
+            } else if (score >= 25) {
+              gradientClass = 'from-orange-500 to-red-500'
+              progressColor = 'stroke-orange-500'
             }
 
             return (
@@ -224,22 +225,15 @@ export default function SuggestionsTab() {
                         cx="40"
                         cy="40"
                         r="36"
-                        stroke="url(#gradient)"
                         strokeWidth="8"
                         fill="none"
                         strokeDasharray={`${2 * Math.PI * 36}`}
                         strokeDashoffset={`${2 * Math.PI * 36 * (1 - recipe.score / 100)}`}
-                        className="transition-all duration-1000"
+                        className={`transition-all duration-1000 ${progressColor}`}
                       />
-                      <defs>
-                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" className={`text-${scoreColor}-400`} stopColor="currentColor" />
-                          <stop offset="100%" className={`text-${scoreColor}-600`} stopColor="currentColor" />
-                        </linearGradient>
-                      </defs>
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className={`text-lg font-bold bg-gradient-to-br ${colorClasses[scoreColor]} bg-clip-text text-transparent`}>
+                      <span className={`text-lg font-bold bg-gradient-to-br ${gradientClass} bg-clip-text text-transparent`}>
                         {Math.round(recipe.score)}%
                       </span>
                     </div>
