@@ -1,16 +1,28 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@/lib/store'
-import { Download, Plus, Check, ShoppingCart, Trash2 } from 'lucide-react'
+import { Download, Plus, Check, ShoppingCart, Trash2, Package } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+interface PurchaseConfirmation {
+  name: string
+  plannedQuantity: number
+  unit: string
+  hasInStock: number
+}
+
 export default function ShoppingTab() {
-  const { menuItems, recipes, pantryItems } = useStore()
+  const { menuItems, recipes, pantryItems, addPantryItem, updatePantryItem } = useStore()
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
   const [customItems, setCustomItems] = useState<string[]>([])
   const [newItem, setNewItem] = useState('')
+  const [confirmPurchase, setConfirmPurchase] = useState<PurchaseConfirmation | null>(null)
+  const [purchaseQuantity, setPurchaseQuantity] = useState('')
+  const [purchaseLocation, setPurchaseLocation] = useState('Frigo')
+  const [purchaseCategory, setPurchaseCategory] = useState('Autre')
+  const [purchaseExpiry, setPurchaseExpiry] = useState('')
 
   // Aggregate ingredients from menu
   const neededIngredients = menuItems.reduce((acc, menuItem) => {
@@ -52,7 +64,39 @@ export default function ShoppingTab() {
   const checkedCount = checkedItems.size
   const progress = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0
 
-  const toggleCheck = (itemName: string) => {
+  const toggleCheck = (item: typeof toBuy[0]) => {
+    const itemKey = item.name
+    const isCurrentlyChecked = checkedItems.has(itemKey)
+    
+    if (!isCurrentlyChecked) {
+      // Au lieu de juste cocher, ouvrir le modal de confirmation
+      setConfirmPurchase({
+        name: item.name,
+        plannedQuantity: item.missing,
+        unit: item.unit,
+        hasInStock: item.hasQty,
+      })
+      setPurchaseQuantity(String(item.missing))
+      
+      // Déterminer automatiquement la catégorie et l'emplacement
+      const autoCategory = guessCategory(item.name)
+      const autoLocation = guessLocation(autoCategory)
+      setPurchaseCategory(autoCategory)
+      setPurchaseLocation(autoLocation)
+      
+      // Marquer comme coché visuellement
+      const newChecked = new Set(checkedItems)
+      newChecked.add(itemKey)
+      setCheckedItems(newChecked)
+    } else {
+      // Décocher
+      const newChecked = new Set(checkedItems)
+      newChecked.delete(itemKey)
+      setCheckedItems(newChecked)
+    }
+  }
+
+  const toggleCheckCustom = (itemName: string) => {
     const newChecked = new Set(checkedItems)
     if (newChecked.has(itemName)) {
       newChecked.delete(itemName)
@@ -60,6 +104,84 @@ export default function ShoppingTab() {
       newChecked.add(itemName)
     }
     setCheckedItems(newChecked)
+  }
+
+  // Deviner la catégorie depuis le nom
+  const guessCategory = (name: string): string => {
+    const n = name.toLowerCase()
+    if (['tomate', 'oignon', 'ail', 'carotte', 'courgette', 'poivron', 'salade'].some(v => n.includes(v))) return 'Légumes'
+    if (['pomme', 'banane', 'orange', 'citron', 'fraise'].some(v => n.includes(v))) return 'Fruits'
+    if (['poulet', 'boeuf', 'porc', 'viande'].some(v => n.includes(v))) return 'Viande'
+    if (['saumon', 'thon', 'poisson'].some(v => n.includes(v))) return 'Poisson'
+    if (['lait', 'yaourt', 'fromage', 'beurre', 'crème'].some(v => n.includes(v))) return 'Produits laitiers'
+    if (['pâte', 'riz', 'farine', 'sucre', 'huile'].some(v => n.includes(v))) return 'Épicerie'
+    if (['eau', 'jus', 'soda'].some(v => n.includes(v))) return 'Boissons'
+    return 'Autre'
+  }
+
+  // Deviner l'emplacement depuis la catégorie
+  const guessLocation = (category: string): string => {
+    if (['Légumes', 'Fruits', 'Viande', 'Poisson', 'Produits laitiers'].includes(category)) return 'Frigo'
+    if (category === 'Surgelés') return 'Congélateur'
+    return 'Placard'
+  }
+
+  // Confirmer l'achat et ajouter au garde-manger
+  const confirmAndAddToPantry = async () => {
+    if (!confirmPurchase) return
+    
+    const qty = parseFloat(purchaseQuantity)
+    if (isNaN(qty) || qty <= 0) {
+      toast.error('Quantité invalide')
+      return
+    }
+
+    try {
+      // Vérifier si le produit existe déjà dans le garde-manger
+      const existingItem = pantryItems.find(
+        p => p.name.toLowerCase() === confirmPurchase.name.toLowerCase()
+      )
+
+      if (existingItem) {
+        // Mettre à jour la quantité
+        await updatePantryItem(existingItem.id, {
+          quantity: existingItem.quantity + qty,
+          expiry_date: purchaseExpiry || existingItem.expiry_date,
+        })
+        toast.success(`${confirmPurchase.name} mis à jour dans le garde-manger`)
+      } else {
+        // Créer un nouveau produit
+        await addPantryItem({
+          user_id: 'temp-user-id', // À remplacer par l'auth
+          name: confirmPurchase.name,
+          quantity: qty,
+          unit: confirmPurchase.unit,
+          location: purchaseLocation,
+          category: purchaseCategory,
+          expiry_date: purchaseExpiry || null,
+        })
+        toast.success(`${confirmPurchase.name} ajouté au garde-manger !`)
+      }
+
+      // Fermer le modal
+      setConfirmPurchase(null)
+      setPurchaseQuantity('')
+      setPurchaseExpiry('')
+      
+    } catch (error) {
+      toast.error('Erreur lors de l\'ajout au garde-manger')
+      console.error(error)
+    }
+  }
+
+  // Annuler et décocher
+  const cancelPurchase = () => {
+    if (confirmPurchase) {
+      const newChecked = new Set(checkedItems)
+      newChecked.delete(confirmPurchase.name)
+      setCheckedItems(newChecked)
+    }
+    setConfirmPurchase(null)
   }
 
   const addCustomItem = () => {
@@ -173,7 +295,7 @@ export default function ShoppingTab() {
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    onClick={() => toggleCheck(item.name)}
+                    onClick={() => toggleCheck(item)}
                     className={`
                       p-4 rounded-xl cursor-pointer transition-all flex items-center gap-4
                       ${isChecked 
@@ -329,6 +451,146 @@ export default function ShoppingTab() {
           </p>
         </motion.div>
       )}
+    </div>
+
+      {/* Modal de confirmation d'achat */}
+      <AnimatePresence>
+        {confirmPurchase && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={cancelPurchase}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="glass-strong p-6 rounded-2xl max-w-md w-full"
+            >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-xl flex items-center justify-center">
+                  <Package className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white">
+                    Retour de courses
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Ajuster la quantité achetée
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Produit
+                  </label>
+                  <div className="px-4 py-3 bg-gray-100 dark:bg-gray-800 rounded-xl">
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      {confirmPurchase.name}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Quantité achetée
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      value={purchaseQuantity}
+                      onChange={(e) => setPurchaseQuantity(e.target.value)}
+                      className="flex-1 px-4 py-3 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all text-lg font-semibold"
+                      placeholder="0"
+                      autoFocus
+                    />
+                    <span className="text-gray-600 dark:text-gray-400 font-medium min-w-[60px]">
+                      {confirmPurchase.unit}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    Prévu : {confirmPurchase.plannedQuantity} {confirmPurchase.unit}
+                    {confirmPurchase.hasInStock > 0 && ` (déjà ${confirmPurchase.hasInStock} en stock)`}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Emplacement
+                    </label>
+                    <select
+                      value={purchaseLocation}
+                      onChange={(e) => setPurchaseLocation(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                    >
+                      <option value="Frigo">Frigo</option>
+                      <option value="Congélateur">Congélateur</option>
+                      <option value="Placard">Placard</option>
+                      <option value="Cave">Cave</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Catégorie
+                    </label>
+                    <select
+                      value={purchaseCategory}
+                      onChange={(e) => setPurchaseCategory(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                    >
+                      <option value="Légumes">Légumes</option>
+                      <option value="Fruits">Fruits</option>
+                      <option value="Viande">Viande</option>
+                      <option value="Poisson">Poisson</option>
+                      <option value="Produits laitiers">Produits laitiers</option>
+                      <option value="Épicerie">Épicerie</option>
+                      <option value="Boissons">Boissons</option>
+                      <option value="Condiments">Condiments</option>
+                      <option value="Surgelés">Surgelés</option>
+                      <option value="Autre">Autre</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Date d'expiration (optionnel)
+                  </label>
+                  <input
+                    type="date"
+                    value={purchaseExpiry}
+                    onChange={(e) => setPurchaseExpiry(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={cancelPurchase}
+                  className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={confirmAndAddToPantry}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium shadow-glow hover:shadow-glow-strong transition-all flex items-center justify-center gap-2"
+                >
+                  <Package className="w-5 h-5" />
+                  Ajouter au garde-manger
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
