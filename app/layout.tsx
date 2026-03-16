@@ -8,6 +8,7 @@ import type { Metadata } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
+import RegisterServiceWorker from './register-sw'
 
 
 const inter = Inter({ 
@@ -62,5 +63,6 @@ export default function RootLayout({
         />
       </body>
     </html>
+    <RegisterServiceWorker />
   )
 }
