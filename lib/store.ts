@@ -41,6 +41,15 @@ export interface MenuItem {
   updated_at: string
 }
 
+export interface CustomShoppingItem {
+  id: string
+  user_id: string
+  name: string
+  is_checked: boolean
+  created_at: string
+  updated_at: string
+}
+
 interface AppStore {
   // Theme
   isDark: boolean
@@ -65,6 +74,13 @@ interface AppStore {
   setMenuItems: (items: MenuItem[]) => void
   addMenuItem: (item: Omit<MenuItem, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   deleteMenuItem: (id: string) => Promise<void>
+  
+  // Custom Shopping Items
+  customShoppingItems: CustomShoppingItem[]
+  setCustomShoppingItems: (items: CustomShoppingItem[]) => void
+  addCustomShoppingItem: (name: string) => Promise<void>
+  toggleCustomShoppingItem: (id: string) => Promise<void>
+  deleteCustomShoppingItem: (id: string) => Promise<void>
   
   // Loading states
   isLoading: boolean
@@ -202,6 +218,60 @@ export const useStore = create<AppStore>((set, get) => ({
     if (error) throw error
     set({
       menuItems: get().menuItems.filter(item => item.id !== id)
+    })
+  },
+  
+  // Custom Shopping Items
+  customShoppingItems: [],
+  setCustomShoppingItems: (items) => set({ customShoppingItems: items }),
+  
+  addCustomShoppingItem: async (name) => {
+    const { data, error } = await supabase
+      .from('pantry_custom_shopping_items')
+      .insert([{ 
+        user_id: 'temp-user-id', // À remplacer par auth
+        name,
+        is_checked: false 
+      }])
+      .select()
+      .single()
+    
+    if (error) throw error
+    if (data) {
+      set({ customShoppingItems: [...get().customShoppingItems, data] })
+    }
+  },
+  
+  toggleCustomShoppingItem: async (id) => {
+    const item = get().customShoppingItems.find(i => i.id === id)
+    if (!item) return
+    
+    const { data, error } = await supabase
+      .from('pantry_custom_shopping_items')
+      .update({ is_checked: !item.is_checked })
+      .eq('id', id)
+      .select()
+      .single()
+    
+    if (error) throw error
+    if (data) {
+      set({
+        customShoppingItems: get().customShoppingItems.map(i => 
+          i.id === id ? data : i
+        )
+      })
+    }
+  },
+  
+  deleteCustomShoppingItem: async (id) => {
+    const { error } = await supabase
+      .from('pantry_custom_shopping_items')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
+    set({
+      customShoppingItems: get().customShoppingItems.filter(i => i.id !== id)
     })
   },
   
