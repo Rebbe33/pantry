@@ -196,14 +196,15 @@ export default function PantryTab() {
                 </button>
                 {LOCATIONS.map(loc => {
                   const Icon = loc.icon
+                  const isActive = filterLocation === loc.id
                   return (
                     <button
                       key={loc.id}
                       onClick={() => setFilterLocation(loc.id)}
                       className={`
                         px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5
-                        ${filterLocation === loc.id
-                          ? `bg-${loc.color}-500 text-white`
+                        ${isActive
+                          ? 'bg-orange-500 text-white'
                           : 'bg-white/50 dark:bg-gray-800/50 hover:bg-white dark:hover:bg-gray-800'
                         }
                       `}
@@ -276,11 +277,7 @@ export default function PantryTab() {
 
               {/* Badges */}
               <div className="flex flex-wrap gap-2 mb-3">
-                <span className={`
-                  inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium
-                  bg-${location?.color}-100 dark:bg-${location?.color}-900/30 
-                  text-${location?.color}-700 dark:text-${location?.color}-300
-                `}>
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
                   <LocationIcon className="w-3 h-3" />
                   {location?.label}
                 </span>
