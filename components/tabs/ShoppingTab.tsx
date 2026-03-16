@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@/lib/store'
 import { Download, Plus, Check, ShoppingCart, Trash2, Package } from 'lucide-react'
@@ -11,15 +11,27 @@ interface PurchaseConfirmation {
   plannedQuantity: number
   unit: string
   hasInStock: number
+  isCustomItem?: boolean
+  customItemId?: string
 }
 
 export default function ShoppingTab() {
-  const { menuItems, recipes, pantryItems, addPantryItem, updatePantryItem } = useStore()
-  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
-  const [customItems, setCustomItems] = useState<string[]>([])
+  const { 
+    menuItems, 
+    recipes, 
+    pantryItems, 
+    customShoppingItems,
+    addPantryItem, 
+    updatePantryItem,
+    addCustomShoppingItem,
+    toggleCustomShoppingItem,
+    deleteCustomShoppingItem
+  } = useStore()
+  
   const [newItem, setNewItem] = useState('')
   const [confirmPurchase, setConfirmPurchase] = useState<PurchaseConfirmation | null>(null)
   const [purchaseQuantity, setPurchaseQuantity] = useState('')
+  const [purchaseUnit, setPurchaseUnit] = useState('g')
   const [purchaseLocation, setPurchaseLocation] = useState('Frigo')
   const [purchaseCategory, setPurchaseCategory] = useState('Autre')
   const [purchaseExpiry, setPurchaseExpiry] = useState('')
@@ -65,45 +77,52 @@ export default function ShoppingTab() {
   const progress = totalItems > 0 ? (checkedCount / totalItems) * 100 : 0
 
   const toggleCheck = (item: typeof toBuy[0]) => {
-    const itemKey = item.name
-    const isCurrentlyChecked = checkedItems.has(itemKey)
+    // Ouvrir le modal de confirmation d'achat
+    setConfirmPurchase({
+      name: item.name,
+      plannedQuantity: item.missing,
+      unit: item.unit,
+      hasInStock: item.hasQty,
+    })
+    setPurchaseQuantity(String(item.missing))
+    setPurchaseUnit(item.unit)
     
-    if (!isCurrentlyChecked) {
-      // Au lieu de juste cocher, ouvrir le modal de confirmation
-      setConfirmPurchase({
-        name: item.name,
-        plannedQuantity: item.missing,
-        unit: item.unit,
-        hasInStock: item.hasQty,
-      })
-      setPurchaseQuantity(String(item.missing))
-      
-      // Déterminer automatiquement la catégorie et l'emplacement
-      const autoCategory = guessCategory(item.name)
-      const autoLocation = guessLocation(autoCategory)
-      setPurchaseCategory(autoCategory)
-      setPurchaseLocation(autoLocation)
-      
-      // Marquer comme coché visuellement
-      const newChecked = new Set(checkedItems)
-      newChecked.add(itemKey)
-      setCheckedItems(newChecked)
-    } else {
-      // Décocher
-      const newChecked = new Set(checkedItems)
-      newChecked.delete(itemKey)
-      setCheckedItems(newChecked)
-    }
+    // Déterminer automatiquement la catégorie et l'emplacement
+    const autoCategory = guessCategory(item.name)
+    const autoLocation = guessLocation(autoCategory)
+    setPurchaseCategory(autoCategory)
+    setPurchaseLocation(autoLocation)
   }
 
-  const toggleCheckCustom = (itemName: string) => {
-    const newChecked = new Set(checkedItems)
-    if (newChecked.has(itemName)) {
-      newChecked.delete(itemName)
-    } else {
-      newChecked.add(itemName)
+  const toggleCheckCustom = async (itemId: string) => {
+    try {
+      const item = customShoppingItems.find(i => i.id === itemId)
+      if (!item) return
+      
+      if (!item.is_checked) {
+        // Ouvrir le modal pour confirmer l'achat
+        setConfirmPurchase({
+          name: item.name,
+          plannedQuantity: 1,
+          unit: 'pièce(s)',
+          hasInStock: 0,
+          isCustomItem: true,
+          customItemId: item.id,
+        })
+        setPurchaseQuantity('1')
+        setPurchaseUnit('pièce(s)')
+        
+        const autoCategory = guessCategory(item.name)
+        const autoLocation = guessLocation(autoCategory)
+        setPurchaseCategory(autoCategory)
+        setPurchaseLocation(autoLocation)
+      } else {
+        // Décocher
+        await toggleCustomShoppingItem(itemId)
+      }
+    } catch (error) {
+      toast.error('Erreur lors de la mise à jour')
     }
-    setCheckedItems(newChecked)
   }
 
   // Deviner la catégorie depuis le nom
@@ -155,12 +174,17 @@ export default function ShoppingTab() {
           user_id: 'temp-user-id', // À remplacer par l'auth
           name: confirmPurchase.name,
           quantity: qty,
-          unit: confirmPurchase.unit,
+          unit: purchaseUnit,
           location: purchaseLocation,
           category: purchaseCategory,
           expiry_date: purchaseExpiry || null,
         })
         toast.success(`${confirmPurchase.name} ajouté au garde-manger !`)
+      }
+
+      // Si c'est un item personnalisé, le marquer comme coché
+      if (confirmPurchase.isCustomItem && confirmPurchase.customItemId) {
+        await toggleCustomShoppingItem(confirmPurchase.customItemId)
       }
 
       // Fermer le modal
@@ -174,24 +198,30 @@ export default function ShoppingTab() {
     }
   }
 
-  // Annuler et décocher
+  // Annuler
   const cancelPurchase = () => {
-    if (confirmPurchase) {
-      const newChecked = new Set(checkedItems)
-      newChecked.delete(confirmPurchase.name)
-      setCheckedItems(newChecked)
-    }
     setConfirmPurchase(null)
   }
 
-  const addCustomItem = () => {
+  const addCustomItem = async () => {
     if (!newItem.trim()) return
-    setCustomItems([...customItems, newItem.trim()])
-    setNewItem('')
+    
+    try {
+      await addCustomShoppingItem(newItem.trim())
+      setNewItem('')
+      toast.success('Article ajouté !')
+    } catch (error) {
+      toast.error('Erreur lors de l\'ajout')
+    }
   }
 
-  const removeCustomItem = (index: number) => {
-    setCustomItems(customItems.filter((_, i) => i !== index))
+  const removeCustomItem = async (id: string) => {
+    try {
+      await deleteCustomShoppingItem(id)
+      toast.success('Article supprimé')
+    } catch (error) {
+      toast.error('Erreur lors de la suppression')
+    }
   }
 
   const exportList = () => {
@@ -287,8 +317,6 @@ export default function ShoppingTab() {
             </h3>
             <div className="space-y-2">
               {toBuy.map((item, index) => {
-                const isChecked = checkedItems.has(item.name)
-                
                 return (
                   <motion.div
                     key={item.name}
@@ -296,26 +324,14 @@ export default function ShoppingTab() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
                     onClick={() => toggleCheck(item)}
-                    className={`
-                      p-4 rounded-xl cursor-pointer transition-all flex items-center gap-4
-                      ${isChecked 
-                        ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
-                        : 'bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800'
-                      }
-                    `}
+                    className="p-4 rounded-xl cursor-pointer transition-all flex items-center gap-4 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800"
                   >
-                    <div className={`
-                      w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all
-                      ${isChecked 
-                        ? 'bg-green-500 border-green-500' 
-                        : 'border-gray-300 dark:border-gray-600'
-                      }
-                    `}>
-                      {isChecked && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
+                    <div className="w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all border-gray-300 dark:border-gray-600">
+                      <ShoppingCart className="w-4 h-4 text-gray-400" />
                     </div>
 
                     <div className="flex-1">
-                      <div className={`font-medium ${isChecked ? 'line-through text-gray-500' : 'text-gray-900 dark:text-white'}`}>
+                      <div className="font-medium text-gray-900 dark:text-white">
                         {item.name}
                       </div>
                       {item.hasQty > 0 && (
@@ -325,7 +341,7 @@ export default function ShoppingTab() {
                       )}
                     </div>
 
-                    <div className={`font-bold ${isChecked ? 'text-gray-500' : 'text-orange-600 dark:text-orange-400'}`}>
+                    <div className="font-bold text-orange-600 dark:text-orange-400">
                       {item.missing} {item.unit}
                     </div>
                   </motion.div>
@@ -342,12 +358,12 @@ export default function ShoppingTab() {
           </h3>
 
           <div className="space-y-2 mb-4">
-            {customItems.map((item, index) => {
-              const isChecked = checkedItems.has(item)
+            {customShoppingItems.map((item) => {
+              const isChecked = item.is_checked
               
               return (
                 <motion.div
-                  key={index}
+                  key={item.id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   className={`
@@ -359,7 +375,7 @@ export default function ShoppingTab() {
                   `}
                 >
                   <div 
-                    onClick={() => toggleCheckCustom(item)}
+                    onClick={() => toggleCheckCustom(item.id)}
                     className={`
                       w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all
                       ${isChecked 
@@ -372,14 +388,14 @@ export default function ShoppingTab() {
                   </div>
 
                   <div 
-                    onClick={() => toggleCheckCustom(item)}
+                    onClick={() => toggleCheckCustom(item.id)}
                     className={`flex-1 font-medium ${isChecked ? 'line-through text-gray-500' : 'text-gray-900 dark:text-white'}`}
                   >
-                    {item}
+                    {item.name}
                   </div>
 
                   <button
-                    onClick={(e) => { e.stopPropagation(); removeCustomItem(index) }}
+                    onClick={(e) => { e.stopPropagation(); removeCustomItem(item.id) }}
                     className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                   >
                     <Trash2 className="w-4 h-4 text-red-600" />
@@ -508,9 +524,19 @@ export default function ShoppingTab() {
                       placeholder="0"
                       autoFocus
                     />
-                    <span className="text-gray-600 dark:text-gray-400 font-medium min-w-[60px]">
-                      {confirmPurchase.unit}
-                    </span>
+                    <select
+                      value={purchaseUnit}
+                      onChange={(e) => setPurchaseUnit(e.target.value)}
+                      className="px-3 py-3 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all font-medium"
+                    >
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="ml">ml</option>
+                      <option value="l">L</option>
+                      <option value="pièce(s)">pièce(s)</option>
+                      <option value="cuillère à soupe">c. à s.</option>
+                      <option value="cuillère à café">c. à c.</option>
+                    </select>
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                     Prévu : {confirmPurchase.plannedQuantity} {confirmPurchase.unit}
