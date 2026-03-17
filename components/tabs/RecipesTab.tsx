@@ -19,12 +19,21 @@ import {
 import toast from 'react-hot-toast'
 
 export default function RecipesTab() {
-  const { recipes, pantryItems, deleteRecipe } = useStore()
+  const { recipes, pantryItems, deleteRecipe, addRecipe } = useStore()
   const [search, setSearch] = useState('')
   const [selectedRecipe, setSelectedRecipe] = useState<string | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
   const [importUrl, setImportUrl] = useState('')
   const [isImporting, setIsImporting] = useState(false)
+
+  // Create form state
+  const [formName, setFormName] = useState('')
+  const [formDuration, setFormDuration] = useState('')
+  const [formServings, setFormServings] = useState('4')
+  const [formDescription, setFormDescription] = useState('')
+  const [formInstructions, setFormInstructions] = useState('')
+  const [formTags, setFormTags] = useState('')
 
   const filtered = recipes.filter(recipe => 
     recipe.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -91,6 +100,39 @@ export default function RecipesTab() {
     }
   }
 
+  const handleCreateRecipe = async () => {
+    if (!formName.trim()) {
+      toast.error('Le nom est requis')
+      return
+    }
+
+    try {
+      await addRecipe({
+        user_id: 'temp-user-id',
+        name: formName.trim(),
+        duration: parseInt(formDuration) || 30,
+        servings: parseInt(formServings) || 4,
+        description: formDescription.trim(),
+        instructions: formInstructions.trim(),
+        tags: formTags.split(',').map(t => t.trim()).filter(Boolean),
+        ingredients: [],
+        image_url: null,
+        source_url: null,
+      })
+
+      toast.success('Recette créée !')
+      setShowCreateModal(false)
+      setFormName('')
+      setFormDuration('')
+      setFormServings('4')
+      setFormDescription('')
+      setFormInstructions('')
+      setFormTags('')
+    } catch (error) {
+      toast.error('Erreur lors de la création')
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Left: Recipe List */}
@@ -109,24 +151,27 @@ export default function RecipesTab() {
               />
             </div>
 
+          <div className="grid grid-cols-2 gap-2 sm:gap-3">
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setShowImportModal(true)}
-              className="px-4 py-2.5 bg-purple-500 text-white rounded-xl shadow-glow hover:shadow-glow-strong transition-all flex items-center gap-2 font-medium"
+              className="px-3 sm:px-4 py-2.5 bg-purple-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium text-sm"
             >
-              <Download className="w-5 h-5" />
-              <span className="hidden sm:inline">Importer</span>
+              <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Importer</span>
             </motion.button>
 
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-glow hover:shadow-glow-strong transition-all flex items-center gap-2 font-medium"
+              onClick={() => setShowCreateModal(true)}
+              className="px-3 sm:px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium text-sm"
             >
-              <Plus className="w-5 h-5" />
-              <span className="hidden sm:inline">Créer</span>
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Créer</span>
             </motion.button>
+          </div>
           </div>
         </div>
 
@@ -379,6 +424,10 @@ export default function RecipesTab() {
               <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white mb-4">
                 Importer une recette
               </h2>
+
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                💡 Fonctionne avec : Marmiton, 750g, Cuisine AZ, AllRecipes, et la plupart des sites utilisant le format JSON-LD
+              </p>
               
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 Collez l'URL d'une recette depuis votre site de cuisine préféré
@@ -415,6 +464,128 @@ export default function RecipesTab() {
                       Importer
                     </>
                   )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Create Modal */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowCreateModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            >
+              <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white mb-4">
+                Créer une recette
+              </h2>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Nom de la recette
+                  </label>
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Ex: Pâtes carbonara"
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Durée (min)
+                    </label>
+                    <input
+                      type="number"
+                      value={formDuration}
+                      onChange={(e) => setFormDuration(e.target.value)}
+                      placeholder="30"
+                      className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Portions
+                    </label>
+                    <input
+                      type="number"
+                      value={formServings}
+                      onChange={(e) => setFormServings(e.target.value)}
+                      placeholder="4"
+                      className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    placeholder="Une délicieuse recette italienne..."
+                    rows={2}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Instructions
+                  </label>
+                  <textarea
+                    value={formInstructions}
+                    onChange={(e) => setFormInstructions(e.target.value)}
+                    placeholder="1. Faire bouillir l'eau&#10;2. Cuire les pâtes..."
+                    rows={4}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Tags (séparés par des virgules)
+                  </label>
+                  <input
+                    type="text"
+                    value={formTags}
+                    onChange={(e) => setFormTags(e.target.value)}
+                    placeholder="Italien, Pâtes, Rapide"
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 px-4 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleCreateRecipe}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  Créer
                 </button>
               </div>
             </motion.div>
