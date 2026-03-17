@@ -78,12 +78,26 @@ export default function RecipesTab() {
 
       const data = await response.json()
       
-      // TODO: Open modal to review and save the imported recipe
-      console.log('Imported recipe:', data)
-      toast.success('Recette importée avec succès !')
+      // Save the imported recipe to database
+      await addRecipe({
+        user_id: 'temp-user-id',
+        name: data.name,
+        description: data.description || null,
+        duration: data.duration || 30,
+        servings: data.servings || 4,
+        steps: data.steps || [],
+        ingredients: data.ingredients || [],
+        tags: data.tags || [],
+        image_url: data.image_url || null,
+        source_url: importUrl,
+        note: null,
+      })
+
+      toast.success('Recette importée et sauvegardée !')
       setShowImportModal(false)
       setImportUrl('')
     } catch (error) {
+      console.error('Import error:', error)
       toast.error('Impossible d\'importer cette recette')
     } finally {
       setIsImporting(false)
