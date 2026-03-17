@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -24,6 +25,8 @@ export default function RecipesTab() {
   const { recipes, pantryItems, deleteRecipe, addRecipe, updateRecipe } = useStore()
   const [search, setSearch] = useState('')
   const [selectedRecipe, setSelectedRecipe] = useState<string | null>(null)
+  const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [openTags, setOpenTags] = useState<Record<string, boolean>>({})
   const [showImportModal, setShowImportModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -40,10 +43,29 @@ export default function RecipesTab() {
   const [formInstructions, setFormInstructions] = useState('')
   const [formTags, setFormTags] = useState('')
 
-  const filtered = recipes.filter(recipe => 
-    recipe.name.toLowerCase().includes(search.toLowerCase()) ||
-    recipe.tags.some(tag => tag.toLowerCase().includes(search.toLowerCase()))
-  )
+  const filtered = recipes.filter(recipe => {
+    const matchesSearch = recipe.name.toLowerCase().includes(search.toLowerCase()) ||
+      recipe.tags.some(tag => tag.toLowerCase().includes(search.toLowerCase()))
+    const matchesTag = selectedTag === 'all' || recipe.tags.includes(selectedTag)
+    return matchesSearch && matchesTag
+  })
+
+  // Get all unique tags
+  const allTags = Array.from(new Set(recipes.flatMap(r => r.tags))).sort()
+
+  // Group by tag
+  const recipesByTag = filtered.reduce((acc, recipe) => {
+    if (recipe.tags.length === 0) {
+      if (!acc['Sans catégorie']) acc['Sans catégorie'] = []
+      acc['Sans catégorie'].push(recipe)
+    } else {
+      recipe.tags.forEach(tag => {
+        if (!acc[tag]) acc[tag] = []
+        acc[tag].push(recipe)
+      })
+    }
+    return acc
+  }, {} as Record<string, typeof recipes>)
 
   const selected = recipes.find(r => r.id === selectedRecipe)
 
@@ -194,9 +216,17 @@ export default function RecipesTab() {
   const getIngredientFromStep = (stepText: string) => {
     if (!selected) return []
     
-    return selected.ingredients.filter(ing => 
-      stepText.toLowerCase().includes(ing.name.toLowerCase())
-    )
+    // Detect ingredients by checking if the ingredient name appears in the step text
+    return selected.ingredients.filter(ing => {
+      const stepLower = stepText.toLowerCase()
+      const ingredientLower = ing.name.toLowerCase()
+      
+      // Check if the ingredient name is in the step
+      // Also check for common variations (plural, etc)
+      return stepLower.includes(ingredientLower) || 
+             stepLower.includes(ingredientLower + 's') ||
+             stepLower.includes(ingredientLower.slice(0, -1)) // singular if ingredient is plural
+    })
   }
 
   return (
@@ -317,6 +347,35 @@ export default function RecipesTab() {
               />
             </div>
 
+            {/* Tag filter */}
+            {allTags.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
+                <button
+                  onClick={() => setSelectedTag('all')}
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
+                    selectedTag === 'all'
+                      ? 'bg-orange-500 text-white shadow-lg'
+                      : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
+                  }`}
+                >
+                  Toutes
+                </button>
+                {allTags.map(tag => (
+                  <button
+                    key={tag}
+                    onClick={() => setSelectedTag(tag)}
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
+                      selectedTag === tag
+                        ? 'bg-orange-500 text-white shadow-lg'
+                        : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <motion.button
                 whileHover={{ scale: 1.02 }}
@@ -341,7 +400,7 @@ export default function RecipesTab() {
           </div>
 
           {/* Recipe Grid */}
-          {filtered.length === 0 ? (
+          {Object.keys(recipesByTag).length === 0 ? (
             <div className="text-center py-16 glass rounded-2xl">
               <ChefHat className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -352,87 +411,121 @@ export default function RecipesTab() {
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map(recipe => {
-                const canMake = canMakeRecipe(recipe)
-                const missing = getMissingIngredients(recipe)
+            <div className="space-y-4">
+              {Object.entries(recipesByTag).map(([tag, tagRecipes]) => {
+                const isOpen = openTags[tag] ?? true
 
                 return (
-                  <motion.div
-                    key={recipe.id}
-                    whileHover={{ y: -4 }}
-                    onClick={() => setSelectedRecipe(recipe.id)}
-                    className="glass rounded-2xl overflow-hidden cursor-pointer hover:shadow-xl transition-all"
-                  >
-                    {recipe.image_url && (
-                      <img
-                        src={recipe.image_url}
-                        alt={recipe.name}
-                        className="w-full h-48 object-cover"
-                      />
-                    )}
-                    
-                    <div className="p-4">
-                      <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2 line-clamp-2">
-                        {recipe.name}
+                  <div key={tag} className="glass-strong rounded-2xl overflow-hidden">
+                    <button
+                      onClick={() => setOpenTags({
+                        ...openTags,
+                        [tag]: !isOpen
+                      })}
+                      className="w-full p-4 flex items-center justify-between hover:bg-white/50 dark:hover:bg-gray-700/50 transition-colors"
+                    >
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        {tag}
+                        <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
+                          ({tagRecipes.length})
+                        </span>
                       </h3>
+                      <ChevronDown 
+                        className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${
+                          isOpen ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
 
-                      {recipe.description && (
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
-                          {recipe.description}
-                        </p>
-                      )}
+                    {isOpen && (
+                      <div className="p-3 pt-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {tagRecipes.map(recipe => {
+                            const canMake = canMakeRecipe(recipe)
+                            const missing = getMissingIngredients(recipe)
 
-                      <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          <span>{recipe.duration} min</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Users className="w-4 h-4" />
-                          <span>{recipe.servings} pers.</span>
+                            return (
+                              <motion.div
+                                key={recipe.id}
+                                whileHover={{ y: -4 }}
+                                onClick={() => setSelectedRecipe(recipe.id)}
+                                className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden cursor-pointer hover:shadow-xl transition-all border-2 border-gray-200 dark:border-gray-700"
+                              >
+                                {recipe.image_url && (
+                                  <img
+                                    src={recipe.image_url}
+                                    alt={recipe.name}
+                                    className="w-full h-48 object-cover"
+                                  />
+                                )}
+                                
+                                <div className="p-4">
+                                  <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2 line-clamp-2">
+                                    {recipe.name}
+                                  </h3>
+
+                                  {recipe.description && (
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
+                                      {recipe.description}
+                                    </p>
+                                  )}
+
+                                  <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="w-4 h-4" />
+                                      <span>{recipe.duration} min</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Users className="w-4 h-4" />
+                                      <span>{recipe.servings} pers.</span>
+                                    </div>
+                                  </div>
+
+                                  {!canMake && missing.length > 0 && (
+                                    <div className="text-xs text-orange-600 dark:text-orange-400 mb-3">
+                                      Il manque {missing.length} ingrédient{missing.length > 1 ? 's' : ''}
+                                    </div>
+                                  )}
+
+                                  <div className="flex flex-wrap gap-2 mb-3">
+                                    {recipe.tags.slice(0, 3).map(t => (
+                                      <span
+                                        key={t}
+                                        className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-lg text-xs"
+                                      >
+                                        {t}
+                                      </span>
+                                    ))}
+                                  </div>
+
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        openEditModal(recipe)
+                                      }}
+                                      className="flex-1 p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors flex items-center justify-center gap-1"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDelete(recipe.id, recipe.name)
+                                      }}
+                                      className="flex-1 p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center gap-1"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )
+                          })}
                         </div>
                       </div>
-
-                      {!canMake && missing.length > 0 && (
-                        <div className="text-xs text-orange-600 dark:text-orange-400 mb-3">
-                          Il manque {missing.length} ingrédient{missing.length > 1 ? 's' : ''}
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {recipe.tags.slice(0, 3).map(tag => (
-                          <span
-                            key={tag}
-                            className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-lg text-xs"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openEditModal(recipe)
-                          }}
-                          className="flex-1 p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors flex items-center justify-center gap-1"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDelete(recipe.id, recipe.name)
-                          }}
-                          className="flex-1 p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center gap-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
+                    )}
+                  </div>
                 )
               })}
             </div>
