@@ -541,31 +541,94 @@ export default function PantryTab() {
             </motion.div>
           </motion.div>
         )}
+        {/* Edit Modal */}
         {editingItemFull && (
-  <motion.div className="fixed inset-0 bg-black/50 z-50...">
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl">
-      <h2>Modifier le produit</h2>
-      
-      <select value={editFormLocation} onChange={...}>
-        {LOCATIONS.map(...)}
-      </select>
-      
-      <select value={editFormCategory} onChange={...}>
-        {CATEGORIES.map(...)}
-      </select>
-      
-      <button onClick={() => {
-        await updatePantryItem(editingItemFull, {
-          location: editFormLocation,
-          category: editFormCategory
-        })
-        setEditingItemFull(null)
-      }}>
-        Sauvegarder
-      </button>
-    </div>
-  </motion.div>
-)}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setEditingItemFull(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl max-w-md w-full"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+                  Modifier le produit
+                </h2>
+                <button
+                  onClick={() => setEditingItemFull(null)}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Emplacement
+                  </label>
+                  <select
+                    value={editFormLocation}
+                    onChange={(e) => setEditFormLocation(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  >
+                    {LOCATIONS.map(loc => (
+                      <option key={loc.id} value={loc.id}>{loc.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Catégorie
+                  </label>
+                  <select
+                    value={editFormCategory}
+                    onChange={(e) => setEditFormCategory(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setEditingItemFull(null)}
+                  className="flex-1 px-4 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await updatePantryItem(editingItemFull, {
+                        location: editFormLocation,
+                        category: editFormCategory
+                      })
+                      toast.success('Produit modifié !')
+                      setEditingItemFull(null)
+                    } catch (error) {
+                      toast.error('Erreur lors de la modification')
+                    }
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  Sauvegarder
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
       </div>
   )
