@@ -1,30 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { useStore, PantryItem } from '@/lib/store'
-import { 
-  Plus, 
-  Search, 
-  Filter,
-  Clock,
-  AlertCircle,
-  Trash2,
-  Edit,
-  Package,
-  Snowflake,
-  Home,
-  Wine,
-} from 'lucide-react'
-import toast from 'react-hot-toast'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useStore } from '@/lib/store'
+import { Plus, Search, AlertCircle, Trash2, Edit2, X, Check, Package, Snowflake, Home, Wine } from 'lucide-react'
 import { format, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import toast from 'react-hot-toast'
 
 const LOCATIONS = [
-  { id: 'fridge', label: 'Frigo', icon: Package, color: 'blue' },
-  { id: 'freezer', label: 'Congélateur', icon: Snowflake, color: 'cyan' },
-  { id: 'pantry', label: 'Placard', icon: Home, color: 'amber' },
-  { id: 'cellar', label: 'Cave', icon: Wine, color: 'purple' },
+  { id: 'Frigo', label: 'Frigo', icon: Package, color: 'bg-blue-500' },
+  { id: 'Congélateur', label: 'Congélateur', icon: Snowflake, color: 'bg-cyan-500' },
+  { id: 'Placard', label: 'Placard', icon: Home, color: 'bg-amber-500' },
+  { id: 'Cave', label: 'Cave', icon: Wine, color: 'bg-purple-500' },
 ]
 
 const CATEGORIES = [
@@ -33,31 +21,105 @@ const CATEGORIES = [
 ]
 
 export default function PantryTab() {
-  const { pantryItems, deletePantryItem } = useStore()
-  const [search, setSearch] = useState('')
-  const [filterLocation, setFilterLocation] = useState<string>('all')
-  const [filterCategory, setFilterCategory] = useState<string>('all')
-  const [showFilters, setShowFilters] = useState(false)
+  const { pantryItems, addPantryItem, updatePantryItem, deletePantryItem } = useStore()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedLocation, setSelectedLocation] = useState<string>('all')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [editingItem, setEditingItem] = useState<string | null>(null)
+  const [editQuantity, setEditQuantity] = useState('')
+  
+  // Form state
+  const [formName, setFormName] = useState('')
+  const [formQuantity, setFormQuantity] = useState('')
+  const [formUnit, setFormUnit] = useState('g')
+  const [formLocation, setFormLocation] = useState('Frigo')
+  const [formCategory, setFormCategory] = useState('Autre')
+  const [formExpiry, setFormExpiry] = useState('')
 
-  const filtered = pantryItems.filter(item => {
-    const matchSearch = item.name.toLowerCase().includes(search.toLowerCase())
-    const matchLocation = filterLocation === 'all' || item.location === filterLocation
-    const matchCategory = filterCategory === 'all' || item.category === filterCategory
-    return matchSearch && matchLocation && matchCategory
+  // Filter items
+  const filteredItems = pantryItems.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesLocation = selectedLocation === 'all' || item.location === selectedLocation
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory
+    return matchesSearch && matchesLocation && matchesCategory
   })
 
-  const expiringSoon = pantryItems.filter(item => {
+  // Group by category
+  const itemsByCategory = filteredItems.reduce((acc, item) => {
+    const cat = item.category || 'Autre'
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(item)
+    return acc
+  }, {} as Record<string, typeof pantryItems>)
+
+  const expiredCount = pantryItems.filter(item => {
+    if (!item.expiry_date) return false
+    return differenceInDays(new Date(item.expiry_date), new Date()) < 0
+  }).length
+
+  const expiringCount = pantryItems.filter(item => {
     if (!item.expiry_date) return false
     const days = differenceInDays(new Date(item.expiry_date), new Date())
-    return days >= 0 && days <= 5
-  })
+    return days >= 0 && days <= 3
+  }).length
 
-  const expired = pantryItems.filter(item => {
-    if (!item.expiry_date) return false
-    return new Date(item.expiry_date) < new Date()
-  })
+  const getExpiryStatus = (expiryDate: string | null) => {
+    if (!expiryDate) return null
+    const days = differenceInDays(new Date(expiryDate), new Date())
+    if (days < 0) return { label: 'Expiré', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20' }
+    if (days <= 3) return { label: `${days}j`, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20' }
+    if (days <= 7) return { label: `${days}j`, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20' }
+    return { label: `${days}j`, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' }
+  }
 
-  const handleDelete = async (id: string) => {
+  const handleAddItem = async () => {
+    if (!formName.trim() || !formQuantity) {
+      toast.error('Nom et quantité requis')
+      return
+    }
+
+    try {
+      await addPantryItem({
+        user_id: 'temp-user-id',
+        name: formName.trim(),
+        quantity: parseFloat(formQuantity),
+        unit: formUnit,
+        location: formLocation,
+        category: formCategory,
+        expiry_date: formExpiry || null,
+      })
+      
+      toast.success('Produit ajouté !')
+      setShowAddModal(false)
+      setFormName('')
+      setFormQuantity('')
+      setFormUnit('g')
+      setFormExpiry('')
+    } catch (error) {
+      toast.error('Erreur lors de l\'ajout')
+    }
+  }
+
+  const handleUpdateQuantity = async (id: string) => {
+    const qty = parseFloat(editQuantity)
+    if (isNaN(qty) || qty < 0) {
+      toast.error('Quantité invalide')
+      return
+    }
+
+    try {
+      await updatePantryItem(id, { quantity: qty })
+      toast.success('Quantité mise à jour')
+      setEditingItem(null)
+    } catch (error) {
+      toast.error('Erreur lors de la mise à jour')
+    }
+  }
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Supprimer "${name}" ?`)) return
+    
     try {
       await deletePantryItem(id)
       toast.success('Produit supprimé')
@@ -66,271 +128,361 @@ export default function PantryTab() {
     }
   }
 
-  const getExpiryStatus = (expiryDate: string | null) => {
-    if (!expiryDate) return null
-    const days = differenceInDays(new Date(expiryDate), new Date())
-    
-    if (days < 0) {
-      return { label: `Expiré depuis ${Math.abs(days)}j`, color: 'red', severity: 'high' }
-    } else if (days === 0) {
-      return { label: "Expire aujourd'hui", color: 'red', severity: 'high' }
-    } else if (days <= 3) {
-      return { label: `Expire dans ${days}j`, color: 'yellow', severity: 'medium' }
-    } else if (days <= 7) {
-      return { label: `Expire dans ${days}j`, color: 'orange', severity: 'low' }
-    }
-    return { label: `${days} jours`, color: 'green', severity: 'none' }
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Alerts */}
-      {(expiringSoon.length > 0 || expired.length > 0) && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-3"
-        >
-          {expired.length > 0 && (
-            <div className="glass p-4 rounded-2xl border-l-4 border-red-500">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-red-700 dark:text-red-400 mb-1">
-                    {expired.length} produit{expired.length > 1 ? 's' : ''} expiré{expired.length > 1 ? 's' : ''}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {expired.map(item => item.name).join(', ')}
-                  </p>
+    <div className="space-y-4 sm:space-y-6">
+      {/* Stats */}
+      {(expiredCount > 0 || expiringCount > 0) && (
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          {expiredCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-strong p-3 sm:p-4 rounded-xl border-l-4 border-red-500"
+            >
+              <div className="flex items-center gap-2 sm:gap-3">
+                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+                <div>
+                  <div className="text-xl sm:text-2xl font-bold text-red-600">{expiredCount}</div>
+                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Expirés</div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
           
-          {expiringSoon.length > 0 && (
-            <div className="glass p-4 rounded-2xl border-l-4 border-yellow-500">
-              <div className="flex items-start gap-3">
-                <Clock className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-yellow-700 dark:text-yellow-400 mb-1">
-                    {expiringSoon.length} produit{expiringSoon.length > 1 ? 's' : ''} à consommer rapidement
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {expiringSoon.map(item => item.name).join(', ')}
-                  </p>
+          {expiringCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-strong p-3 sm:p-4 rounded-xl border-l-4 border-orange-500"
+            >
+              <div className="flex items-center gap-2 sm:gap-3">
+                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
+                <div>
+                  <div className="text-xl sm:text-2xl font-bold text-orange-600">{expiringCount}</div>
+                  <div className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">À consommer</div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
-        </motion.div>
+        </div>
       )}
 
-      {/* Toolbar */}
-      <div className="glass p-4 rounded-2xl space-y-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher un produit..."
-              className="w-full pl-10 pr-4 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
-            />
-          </div>
-
-          {/* Filter Button */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setShowFilters(!showFilters)}
-            className={`
-              px-4 py-2.5 rounded-xl font-medium transition-all flex items-center gap-2
-              ${showFilters 
-                ? 'bg-orange-500 text-white shadow-glow' 
-                : 'bg-white/50 dark:bg-gray-800/50 hover:bg-white dark:hover:bg-gray-800'
-              }
-            `}
-          >
-            <Filter className="w-5 h-5" />
-            <span className="hidden sm:inline">Filtres</span>
-          </motion.button>
-
-          {/* Add Button */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-glow hover:shadow-glow-strong transition-all flex items-center gap-2 font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            <span className="hidden sm:inline">Ajouter</span>
-          </motion.button>
+      {/* Filters */}
+      <div className="glass-strong p-3 sm:p-4 rounded-xl space-y-3 sm:space-y-4">
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Rechercher un produit..."
+            className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2 sm:py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all text-sm sm:text-base"
+          />
         </div>
 
-        {/* Filters Panel */}
-        {showFilters && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="space-y-3 pt-4 border-t border-gray-200 dark:border-gray-700"
+        {/* Location filter */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
+          <button
+            onClick={() => setSelectedLocation('all')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
+              selectedLocation === 'all'
+                ? 'bg-orange-500 text-white shadow-lg'
+                : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
+            }`}
           >
-            {/* Location Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Emplacement
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setFilterLocation('all')}
-                  className={`
-                    px-3 py-1.5 rounded-lg text-sm font-medium transition-all
-                    ${filterLocation === 'all'
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-white/50 dark:bg-gray-800/50 hover:bg-white dark:hover:bg-gray-800'
-                    }
-                  `}
-                >
-                  Tous
-                </button>
-                {LOCATIONS.map(loc => {
-                  const Icon = loc.icon
-                  const isActive = filterLocation === loc.id
+            Tous
+          </button>
+          {LOCATIONS.map(loc => (
+            <button
+              key={loc.id}
+              onClick={() => setSelectedLocation(loc.id)}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1.5 sm:gap-2 ${
+                selectedLocation === loc.id
+                  ? `${loc.color} text-white shadow-lg`
+                  : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
+              }`}
+            >
+              <loc.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">{loc.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Category filter */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
+              selectedCategory === 'all'
+                ? 'bg-orange-500 text-white shadow-lg'
+                : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
+            }`}
+          >
+            Toutes
+          </button>
+          {CATEGORIES.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
+                selectedCategory === cat
+                  ? 'bg-orange-500 text-white shadow-lg'
+                  : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {/* Add button */}
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg sm:rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+        >
+          <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+          Ajouter un produit
+        </button>
+      </div>
+
+      {/* Items by category */}
+      {Object.keys(itemsByCategory).length === 0 ? (
+        <div className="text-center py-12 sm:py-16 glass-strong rounded-xl sm:rounded-2xl">
+          <Package className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300 dark:text-gray-700" />
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Garde-manger vide
+          </h3>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
+            Ajoutez vos premiers produits
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4 sm:space-y-6">
+          {Object.entries(itemsByCategory).map(([category, items]) => (
+            <div key={category}>
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-3 sm:mb-4 px-2">
+                {category}
+              </h3>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
+                {items.map((item, index) => {
+                  const expiryStatus = getExpiryStatus(item.expiry_date)
+                  const isEditing = editingItem === item.id
+                  
                   return (
-                    <button
-                      key={loc.id}
-                      onClick={() => setFilterLocation(loc.id)}
-                      className={`
-                        px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5
-                        ${isActive
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-white/50 dark:bg-gray-800/50 hover:bg-white dark:hover:bg-gray-800'
-                        }
-                      `}
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.03 }}
+                      className="glass-strong rounded-xl sm:rounded-2xl overflow-hidden hover:shadow-lg transition-all"
                     >
-                      <Icon className="w-4 h-4" />
-                      {loc.label}
-                    </button>
+                      <div className="p-3 sm:p-4">
+                        {/* Name */}
+                        <h4 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm sm:text-base line-clamp-2">
+                          {item.name}
+                        </h4>
+
+                        {/* Quantity - editable */}
+                        {isEditing ? (
+                          <div className="flex items-center gap-1 mb-2">
+                            <input
+                              type="number"
+                              value={editQuantity}
+                              onChange={(e) => setEditQuantity(e.target.value)}
+                              className="flex-1 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleUpdateQuantity(item.id)}
+                              className="p-1 bg-green-500 text-white rounded hover:bg-green-600"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingItem(null)}
+                              className="p-1 bg-gray-500 text-white rounded hover:bg-gray-600"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditingItem(item.id)
+                              setEditQuantity(String(item.quantity))
+                            }}
+                            className="text-lg sm:text-xl font-bold text-orange-600 dark:text-orange-400 mb-2 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+                          >
+                            {item.quantity} {item.unit}
+                          </button>
+                        )}
+
+                        {/* Expiry */}
+                        {expiryStatus && (
+                          <div className={`text-xs px-2 py-1 rounded-lg mb-2 ${expiryStatus.bg}`}>
+                            <span className={`font-medium ${expiryStatus.color}`}>
+                              {expiryStatus.label}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex gap-1 sm:gap-2">
+                          <button
+                            onClick={() => handleDelete(item.id, item.name)}
+                            className="flex-1 p-1.5 sm:p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto" />
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
                   )
                 })}
               </div>
             </div>
+          ))}
+        </div>
+      )}
 
-            {/* Category Filter */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Catégorie
-              </label>
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="w-full px-3 py-2 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all"
-              >
-                <option value="all">Toutes les catégories</option>
-                {CATEGORIES.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
+      {/* Add Modal */}
+      <AnimatePresence>
+        {showAddModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowAddModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="glass-strong p-4 sm:p-6 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+                  Ajouter un produit
+                </h2>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 sm:space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Nom
+                  </label>
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                    placeholder="Ex: Tomates"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Quantité
+                    </label>
+                    <input
+                      type="number"
+                      value={formQuantity}
+                      onChange={(e) => setFormQuantity(e.target.value)}
+                      className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Unité
+                    </label>
+                    <select
+                      value={formUnit}
+                      onChange={(e) => setFormUnit(e.target.value)}
+                      className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                    >
+                      <option value="g">g</option>
+                      <option value="kg">kg</option>
+                      <option value="ml">ml</option>
+                      <option value="l">L</option>
+                      <option value="pièce(s)">pièce(s)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Emplacement
+                  </label>
+                  <select
+                    value={formLocation}
+                    onChange={(e) => setFormLocation(e.target.value)}
+                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  >
+                    {LOCATIONS.map(loc => (
+                      <option key={loc.id} value={loc.id}>{loc.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Catégorie
+                  </label>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  >
+                    {CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Date d'expiration (optionnel)
+                  </label>
+                  <input
+                    type="date"
+                    value={formExpiry}
+                    onChange={(e) => setFormExpiry(e.target.value)}
+                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-4 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleAddItem}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
-      </div>
-
-      {/* Items Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filtered.map((item, index) => {
-          const expiryStatus = getExpiryStatus(item.expiry_date)
-          const location = LOCATIONS.find(l => l.id === item.location)
-          const LocationIcon = location?.icon || Package
-
-          return (
-            <motion.div
-              key={item.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.05 }}
-              className="glass p-4 rounded-2xl hover:shadow-glow transition-all group"
-            >
-              {/* Header */}
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                    {item.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {item.quantity} {item.unit}
-                  </p>
-                </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="p-1.5 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors">
-                    <Edit className="w-4 h-4 text-orange-600" />
-                  </button>
-                  <button 
-                    onClick={() => handleDelete(item.id)}
-                    className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Badges */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-                  <LocationIcon className="w-3 h-3" />
-                  {location?.label}
-                </span>
-                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-medium">
-                  {item.category}
-                </span>
-              </div>
-
-              {/* Expiry */}
-              {expiryStatus && (
-                <div className={`
-                  flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium
-                  ${expiryStatus.severity === 'high' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' :
-                    expiryStatus.severity === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' :
-                    expiryStatus.severity === 'low' ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300' :
-                    'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                  }
-                `}>
-                  <Clock className="w-3.5 h-3.5" />
-                  {expiryStatus.label}
-                </div>
-              )}
-            </motion.div>
-          )
-        })}
-      </div>
-
-      {/* Empty State */}
-      {filtered.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center py-16"
-        >
-          <Package className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-            Aucun produit trouvé
-          </h3>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            {search || filterLocation !== 'all' || filterCategory !== 'all'
-              ? 'Essayez de modifier vos filtres'
-              : 'Commencez par ajouter des produits à votre garde-manger'
-            }
-          </p>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-glow hover:shadow-glow-strong transition-all font-medium"
-          >
-            Ajouter un produit
-          </motion.button>
-        </motion.div>
-      )}
+      </AnimatePresence>
     </div>
   )
 }
