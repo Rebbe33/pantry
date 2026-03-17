@@ -373,6 +373,7 @@ export default function PantryTab() {
                           </div>
                         )}
                         </div>
+                      </div>
                         {/* Actions */}
                         <div className="flex gap-1 sm:gap-2 mt-auto">
                           <button
