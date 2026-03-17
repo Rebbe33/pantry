@@ -155,7 +155,7 @@ export default function Home() {
                   whileHover={{ y: -2 }}
                   whileTap={{ y: 0 }}
                 >
-                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-5 lg:h-5" />
                   <span className="hidden xs:inline sm:inline">{tab.label}</span>
                   
                   {tab.id === 'pantry' && expiredCount > 0 && (
@@ -197,22 +197,6 @@ export default function Home() {
           </motion.div>
         </AnimatePresence>
       </main>
-
-      {/* Floating Action Button (Mobile) */}
-      <motion.button
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        onClick={() => {
-          // Trigger add action based on active tab
-          const addButton = document.querySelector('[data-add-button]') as HTMLButtonElement
-          if (addButton) addButton.click()
-        }}
-        className="md:hidden fixed bottom-4 right-4 sm:bottom-6 sm:right-6 p-3 sm:p-4 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-full shadow-glow-strong z-40"
-      >
-        <Plus className="w-5 h-5 sm:w-6 sm:h-6" />
-      </motion.button>
     </div>
   )
 }
