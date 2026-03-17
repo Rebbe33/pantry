@@ -287,39 +287,39 @@ export default function PantryTab() {
 
                         {/* Quantity - editable */}
                         {isEditing ? (
-                          <div className="mb-2 space-y-2">
-                            <div className="flex items-center gap-1">
+                          <div className="mb-2 space-y-1.5">
+                            <div className="grid grid-cols-2 gap-1.5">
                               <input
                                 type="number"
                                 value={editQuantity}
                                 onChange={(e) => setEditQuantity(e.target.value)}
-                                className="flex-1 px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
+                                className="w-full px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
                                 autoFocus
                               />
                               <select
                                 value={editUnit}
                                 onChange={(e) => setEditUnit(e.target.value)}
-                                className="px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
+                                className="w-full px-1.5 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
                               >
                                 <option value="g">g</option>
                                 <option value="kg">kg</option>
                                 <option value="ml">ml</option>
                                 <option value="l">L</option>
-                                <option value="pièce(s)">pièce(s)</option>
+                                <option value="pièce(s)">pc</option>
                               </select>
                             </div>
-                            <div className="flex gap-1">
+                            <div className="grid grid-cols-2 gap-1.5">
                               <button
                                 onClick={() => handleUpdateQuantity(item.id)}
-                                className="flex-1 p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs font-medium"
+                                className="w-full py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs font-medium"
                               >
-                                ✓ OK
+                                ✓
                               </button>
                               <button
                                 onClick={() => setEditingItem(null)}
-                                className="flex-1 p-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-xs font-medium"
+                                className="w-full py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-xs font-medium"
                               >
-                                ✕ Annuler
+                                ✕
                               </button>
                             </div>
                           </div>
@@ -330,7 +330,7 @@ export default function PantryTab() {
                               setEditQuantity(String(item.quantity))
                               setEditUnit(item.unit)
                             }}
-                            className="text-lg sm:text-xl font-bold text-orange-600 dark:text-orange-400 mb-2 hover:text-orange-700 dark:hover:text-orange-300 transition-colors block w-full text-left"
+                            className="text-base sm:text-lg font-bold text-orange-600 dark:text-orange-400 mb-2 hover:text-orange-700 dark:hover:text-orange-300 transition-colors block w-full text-left"
                           >
                             {item.quantity} {item.unit}
                           </button>
