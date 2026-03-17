@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@/lib/store'
-import { Plus, Search, AlertCircle, Trash2, Edit2, X, Check, Package, Snowflake, Home, Wine } from 'lucide-react'
+import { Plus, Search, AlertCircle, Trash2, Edit2, X, Check, Package, Snowflake, Home, Wine, ChevronDown } from 'lucide-react'
 import { format, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -29,6 +29,10 @@ export default function PantryTab() {
   const [editingItem, setEditingItem] = useState<string | null>(null)
   const [editQuantity, setEditQuantity] = useState('')
   const [editUnit, setEditUnit] = useState('g')
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({})
+  const [editingItemFull, setEditingItemFull] = useState<string | null>(null)
+  const [editFormLocation, setEditFormLocation] = useState('')
+  const [editFormCategory, setEditFormCategory] = useState('')
   
   // Form state
   const [formName, setFormName] = useState('')
@@ -260,14 +264,37 @@ export default function PantryTab() {
         </div>
       ) : (
         <div className="space-y-4 sm:space-y-6">
-          {Object.entries(itemsByCategory).map(([category, items]) => (
-            <div key={category}>
-              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-3 sm:mb-4 px-2">
-                {category}
-              </h3>
+          {Object.entries(itemsByCategory).map(([category, items]) => {
+            const isOpen = openCategories[category] ?? true // Ouvert par défaut
+            
+            return (
+              <div key={category} className="glass-strong rounded-2xl overflow-hidden mb-4">
+                {/* Header cliquable */}
+                <button
+                  onClick={() => setOpenCategories({
+                    ...openCategories,
+                    [category]: !isOpen
+                  })}
+                  className="w-full p-4 flex items-center justify-between hover:bg-white/50 dark:hover:bg-gray-700/50 transition-colors"
+                >
+                  <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    {category}
+                    <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
+                      ({items.length})
+                    </span>
+                  </h3>
+                  <ChevronDown 
+                    className={`w-5 h-5 text-gray-500 transition-transform duration-200 ${
+                      isOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
               
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
-                {items.map((item, index) => {
+                {/* Contenu déroulant */}
+                {isOpen && (
+                  <div className="p-3 pt-0">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
+                      {items.map((item, index) => {
                   const expiryStatus = getExpiryStatus(item.expiry_date)
                   const isEditing = editingItem === item.id
                   
@@ -279,7 +306,8 @@ export default function PantryTab() {
                       transition={{ delay: index * 0.03 }}
                       className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-600 hover:shadow-xl transition-all"
                     >
-                      <div className="p-3 sm:p-4">
+                      <div className="p-3 sm:p-4 flex flex-col h-full">
+                        <div className="flex-1">
                         {/* Name */}
                         <h4 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm sm:text-base line-clamp-2">
                           {item.name}
@@ -344,9 +372,19 @@ export default function PantryTab() {
                             </span>
                           </div>
                         )}
-
+                        </div>
                         {/* Actions */}
-                        <div className="flex gap-1 sm:gap-2">
+                        <div className="flex gap-1 sm:gap-2 mt-auto">
+                          <button
+                            onClick={() => {
+                                setEditingItemFull(item.id)
+                                setEditFormLocation(item.location)
+                                setEditFormCategory(item.category)
+                                  }}
+                              className="flex-1 p-1.5 sm:p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                          >
+                          <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto" />
+                          </button>
                           <button
                             onClick={() => handleDelete(item.id, item.name)}
                             className="flex-1 p-1.5 sm:p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
@@ -358,9 +396,12 @@ export default function PantryTab() {
                     </motion.div>
                   )
                 })}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -499,6 +540,31 @@ export default function PantryTab() {
             </motion.div>
           </motion.div>
         )}
+        {editingItemFull && (
+  <motion.div className="fixed inset-0 bg-black/50 z-50...">
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl">
+      <h2>Modifier le produit</h2>
+      
+      <select value={editFormLocation} onChange={...}>
+        {LOCATIONS.map(...)}
+      </select>
+      
+      <select value={editFormCategory} onChange={...}>
+        {CATEGORIES.map(...)}
+      </select>
+      
+      <button onClick={() => {
+        await updatePantryItem(editingItemFull, {
+          location: editFormLocation,
+          category: editFormCategory
+        })
+        setEditingItemFull(null)
+      }}>
+        Sauvegarder
+      </button>
+    </div>
+  </motion.div>
+)}
       </AnimatePresence>
     </div>
   )
