@@ -393,7 +393,6 @@ export default function PantryTab() {
                           </button>
                         </div>
                       </div>
-                      </div>
                     </motion.div>
                   )
                 })}
