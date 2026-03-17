@@ -567,5 +567,6 @@ export default function PantryTab() {
   </motion.div>
 )}
       </AnimatePresence>
+      </div>
   )
 }
