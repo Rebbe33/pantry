@@ -28,6 +28,7 @@ export default function PantryTab() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingItem, setEditingItem] = useState<string | null>(null)
   const [editQuantity, setEditQuantity] = useState('')
+  const [editUnit, setEditUnit] = useState('g')
   
   // Form state
   const [formName, setFormName] = useState('')
@@ -109,7 +110,7 @@ export default function PantryTab() {
     }
 
     try {
-      await updatePantryItem(id, { quantity: qty })
+      await updatePantryItem(id, { quantity: qty, unit: editUnit })
       toast.success('Quantité mise à jour')
       setEditingItem(null)
     } catch (error) {
@@ -276,7 +277,7 @@ export default function PantryTab() {
                       initial={{ opacity: 0, scale: 0.9 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: index * 0.03 }}
-                      className="glass-strong rounded-xl sm:rounded-2xl overflow-hidden hover:shadow-lg transition-all"
+                      className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-600 hover:shadow-xl transition-all"
                     >
                       <div className="p-3 sm:p-4">
                         {/* Name */}
@@ -286,34 +287,50 @@ export default function PantryTab() {
 
                         {/* Quantity - editable */}
                         {isEditing ? (
-                          <div className="flex items-center gap-1 mb-2">
-                            <input
-                              type="number"
-                              value={editQuantity}
-                              onChange={(e) => setEditQuantity(e.target.value)}
-                              className="flex-1 px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleUpdateQuantity(item.id)}
-                              className="p-1 bg-green-500 text-white rounded hover:bg-green-600"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => setEditingItem(null)}
-                              className="p-1 bg-gray-500 text-white rounded hover:bg-gray-600"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
+                          <div className="mb-2 space-y-2">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={editQuantity}
+                                onChange={(e) => setEditQuantity(e.target.value)}
+                                className="flex-1 px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
+                                autoFocus
+                              />
+                              <select
+                                value={editUnit}
+                                onChange={(e) => setEditUnit(e.target.value)}
+                                className="px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
+                              >
+                                <option value="g">g</option>
+                                <option value="kg">kg</option>
+                                <option value="ml">ml</option>
+                                <option value="l">L</option>
+                                <option value="pièce(s)">pièce(s)</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleUpdateQuantity(item.id)}
+                                className="flex-1 p-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs font-medium"
+                              >
+                                ✓ OK
+                              </button>
+                              <button
+                                onClick={() => setEditingItem(null)}
+                                className="flex-1 p-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-xs font-medium"
+                              >
+                                ✕ Annuler
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <button
                             onClick={() => {
                               setEditingItem(item.id)
                               setEditQuantity(String(item.quantity))
+                              setEditUnit(item.unit)
                             }}
-                            className="text-lg sm:text-xl font-bold text-orange-600 dark:text-orange-400 mb-2 hover:text-orange-700 dark:hover:text-orange-300 transition-colors"
+                            className="text-lg sm:text-xl font-bold text-orange-600 dark:text-orange-400 mb-2 hover:text-orange-700 dark:hover:text-orange-300 transition-colors block w-full text-left"
                           >
                             {item.quantity} {item.unit}
                           </button>
