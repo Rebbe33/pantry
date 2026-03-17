@@ -94,12 +94,12 @@ export default function Home() {
             >
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-br from-orange-400 to-amber-500 rounded-xl sm:rounded-2xl blur-sm opacity-75" />
-                <div className="relative bg-gradient-to-br from-orange-500 to-amber-600 p-1.5 sm:p-2.5 lg:p-3 rounded-xl sm:rounded-2xl shadow-glow">
-                  <ChefHat className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" />
+                <div className="relative bg-gradient-to-br from-orange-500 to-amber-600 p-2.5 sm:p-2.5 lg:p-3 rounded-xl sm:rounded-2xl shadow-glow">
+                  <ChefHat className="w-6 h-6 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
               </div>
               <div>
-                <h1 className="font-playfair text-sm sm:text-lg lg:text-2xl font-bold text-gradient">
+                <h1 className="font-playfair text-base sm:text-lg lg:text-2xl font-bold text-gradient">
                   Mon Garde-Manger
                 </h1>
                 <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 hidden sm:block">
@@ -204,6 +204,11 @@ export default function Home() {
         animate={{ scale: 1 }}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
+        onClick={() => {
+          // Trigger add action based on active tab
+          const addButton = document.querySelector('[data-add-button]') as HTMLButtonElement
+          if (addButton) addButton.click()
+        }}
         className="md:hidden fixed bottom-4 right-4 sm:bottom-6 sm:right-6 p-3 sm:p-4 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-full shadow-glow-strong z-40"
       >
         <Plus className="w-5 h-5 sm:w-6 sm:h-6" />
