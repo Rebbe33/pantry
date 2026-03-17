@@ -12,18 +12,23 @@ import {
   Edit,
   ExternalLink,
   Download,
-  Upload,
-  Sparkles,
+  X,
   ChefHat,
+  ArrowLeft,
+  ArrowRight,
+  Check,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function RecipesTab() {
-  const { recipes, pantryItems, deleteRecipe, addRecipe } = useStore()
+  const { recipes, pantryItems, deleteRecipe, addRecipe, updateRecipe } = useStore()
   const [search, setSearch] = useState('')
   const [selectedRecipe, setSelectedRecipe] = useState<string | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [showCookingMode, setShowCookingMode] = useState(false)
+  const [currentStep, setCurrentStep] = useState(0)
   const [importUrl, setImportUrl] = useState('')
   const [isImporting, setIsImporting] = useState(false)
 
@@ -104,7 +109,9 @@ export default function RecipesTab() {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer la recette "${name}" ?`)) return
+
     try {
       await deleteRecipe(id)
       toast.success('Recette supprimée')
@@ -148,14 +155,158 @@ export default function RecipesTab() {
     }
   }
 
+  const handleEditRecipe = async () => {
+    if (!selectedRecipe || !formName.trim()) return
+
+    try {
+      await updateRecipe(selectedRecipe, {
+        name: formName.trim(),
+        duration: parseInt(formDuration) || 30,
+        servings: parseInt(formServings) || 4,
+        description: formDescription.trim() || null,
+        steps: formInstructions.trim().split('\n').filter(Boolean),
+        tags: formTags.split(',').map(t => t.trim()).filter(Boolean),
+      })
+
+      toast.success('Recette modifiée !')
+      setShowEditModal(false)
+    } catch (error) {
+      toast.error('Erreur lors de la modification')
+    }
+  }
+
+  const openEditModal = (recipe: typeof recipes[0]) => {
+    setFormName(recipe.name)
+    setFormDuration(String(recipe.duration))
+    setFormServings(String(recipe.servings))
+    setFormDescription(recipe.description || '')
+    setFormInstructions(recipe.steps.join('\n'))
+    setFormTags(recipe.tags.join(', '))
+    setShowEditModal(true)
+  }
+
+  const startCookingMode = () => {
+    setCurrentStep(0)
+    setShowCookingMode(true)
+    setSelectedRecipe(null)
+  }
+
+  const getIngredientFromStep = (stepText: string) => {
+    if (!selected) return []
+    
+    return selected.ingredients.filter(ing => 
+      stepText.toLowerCase().includes(ing.name.toLowerCase())
+    )
+  }
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Left: Recipe List */}
-      <div className="lg:col-span-2 space-y-4">
-        {/* Toolbar */}
-        <div className="glass p-4 rounded-2xl space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+    <>
+      {/* Cooking Mode */}
+      {showCookingMode && selected ? (
+        <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 dark:from-gray-900 dark:to-gray-800 p-4">
+          <div className="max-w-2xl mx-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <button
+                onClick={() => setShowCookingMode(false)}
+                className="p-2 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-6 h-6" />
+              </button>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                {selected.name}
+              </h2>
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                {currentStep + 1}/{selected.steps.length}
+              </div>
+            </div>
+
+            {/* Progress */}
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-8">
+              <div 
+                className="bg-gradient-to-r from-orange-500 to-amber-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${((currentStep + 1) / selected.steps.length) * 100}%` }}
+              />
+            </div>
+
+            {/* Current Step */}
+            <motion.div
+              key={currentStep}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-xl mb-6"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold">
+                  {currentStep + 1}
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Étape {currentStep + 1}
+                </h3>
+              </div>
+
+              <p className="text-base text-gray-700 dark:text-gray-300 mb-6 leading-relaxed">
+                {selected.steps[currentStep]}
+              </p>
+
+              {/* Ingredients in this step */}
+              {getIngredientFromStep(selected.steps[currentStep]).length > 0 && (
+                <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 mb-4">
+                  <h4 className="text-sm font-semibold text-orange-900 dark:text-orange-200 mb-2 flex items-center gap-2">
+                    <ChefHat className="w-4 h-4" />
+                    Ingrédients nécessaires :
+                  </h4>
+                  <ul className="space-y-1">
+                    {getIngredientFromStep(selected.steps[currentStep]).map((ing, idx) => (
+                      <li key={idx} className="text-sm text-orange-800 dark:text-orange-300">
+                        • {ing.quantity} {ing.unit} de {ing.name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Navigation */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
+                disabled={currentStep === 0}
+                className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                Précédent
+              </button>
+              
+              {currentStep < selected.steps.length - 1 ? (
+                <button
+                  onClick={() => setCurrentStep(currentStep + 1)}
+                  className="flex-1 py-3 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
+                  Suivant
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setShowCookingMode(false)
+                    toast.success('Recette terminée ! Bon appétit ! 🎉')
+                  }}
+                  className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
+                  <Check className="w-5 h-5" />
+                  Terminer
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6">
+          {/* Toolbar */}
+          <div className="glass p-4 rounded-2xl space-y-4">
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
@@ -166,261 +317,275 @@ export default function RecipesTab() {
               />
             </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:gap-3">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setShowImportModal(true)}
-              className="px-3 sm:px-4 py-2.5 bg-purple-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium text-sm"
-            >
-              <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Importer</span>
-            </motion.button>
-
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setShowCreateModal(true)}
-              className="px-3 sm:px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium text-sm"
-            >
-              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Créer</span>
-            </motion.button>
-          </div>
-          </div>
-        </div>
-
-        {/* Recipes Grid */}
-        <div className="space-y-3">
-          {filtered.map((recipe, index) => {
-            const canMake = canMakeRecipe(recipe)
-            const missing = getMissingIngredients(recipe)
-            const isSelected = selectedRecipe === recipe.id
-
-            return (
-              <motion.div
-                key={recipe.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-                onClick={() => setSelectedRecipe(recipe.id)}
-                className={`
-                  glass p-4 rounded-2xl cursor-pointer transition-all group
-                  ${isSelected ? 'ring-2 ring-orange-500 shadow-glow' : 'hover:shadow-lg'}
-                  ${canMake ? 'border-l-4 border-green-500' : 'border-l-4 border-gray-200 dark:border-gray-700'}
-                `}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowImportModal(true)}
+                className="px-3 sm:px-4 py-2.5 bg-purple-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium text-sm"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold text-gray-900 dark:text-white">
+                <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>Importer</span>
+              </motion.button>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setShowCreateModal(true)}
+                className="px-3 sm:px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium text-sm"
+              >
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>Créer</span>
+              </motion.button>
+            </div>
+          </div>
+
+          {/* Recipe Grid */}
+          {filtered.length === 0 ? (
+            <div className="text-center py-16 glass rounded-2xl">
+              <ChefHat className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Aucune recette
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Importez ou créez votre première recette
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map(recipe => {
+                const canMake = canMakeRecipe(recipe)
+                const missing = getMissingIngredients(recipe)
+
+                return (
+                  <motion.div
+                    key={recipe.id}
+                    whileHover={{ y: -4 }}
+                    onClick={() => setSelectedRecipe(recipe.id)}
+                    className="glass rounded-2xl overflow-hidden cursor-pointer hover:shadow-xl transition-all"
+                  >
+                    {recipe.image_url && (
+                      <img
+                        src={recipe.image_url}
+                        alt={recipe.name}
+                        className="w-full h-48 object-cover"
+                      />
+                    )}
+                    
+                    <div className="p-4">
+                      <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2 line-clamp-2">
                         {recipe.name}
                       </h3>
-                      {recipe.source_url && (
-                        <ExternalLink className="w-4 h-4 text-gray-400" />
+
+                      {recipe.description && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
+                          {recipe.description}
+                        </p>
                       )}
-                    </div>
 
-                    {recipe.description && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">
-                        {recipe.description}
-                      </p>
-                    )}
+                      <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          <span>{recipe.duration} min</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Users className="w-4 h-4" />
+                          <span>{recipe.servings} pers.</span>
+                        </div>
+                      </div>
 
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {recipe.tags.map(tag => (
-                        <span
-                          key={tag}
-                          className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-lg text-xs font-medium"
+                      {!canMake && missing.length > 0 && (
+                        <div className="text-xs text-orange-600 dark:text-orange-400 mb-3">
+                          Il manque {missing.length} ingrédient{missing.length > 1 ? 's' : ''}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {recipe.tags.slice(0, 3).map(tag => (
+                          <span
+                            key={tag}
+                            className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-lg text-xs"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openEditModal(recipe)
+                          }}
+                          className="flex-1 p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors flex items-center justify-center gap-1"
                         >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {recipe.duration} min
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDelete(recipe.id, recipe.name)
+                          }}
+                          className="flex-1 p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center justify-center gap-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Users className="w-4 h-4" />
-                        {recipe.servings} pers.
-                      </div>
-                      {canMake ? (
-                        <span className="text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
-                          <Sparkles className="w-4 h-4" />
-                          Réalisable
-                        </span>
-                      ) : (
-                        <span className="text-red-600 dark:text-red-400 text-xs">
-                          {missing.length} manquant{missing.length > 1 ? 's' : ''}
-                        </span>
-                      )}
                     </div>
-                  </div>
-
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={(e) => { e.stopPropagation() }}
-                      className="p-1.5 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
-                    >
-                      <Edit className="w-4 h-4 text-orange-600" />
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDelete(recipe.id) }}
-                      className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-600" />
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )
-          })}
+                  </motion.div>
+                )
+              })}
+            </div>
+          )}
         </div>
+      )}
 
-        {/* Empty State */}
-        {filtered.length === 0 && (
+      {/* Recipe Detail Modal */}
+      <AnimatePresence>
+        {selectedRecipe && selected && !showCookingMode && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center py-16 glass rounded-2xl"
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setSelectedRecipe(null)}
           >
-            <ChefHat className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Aucune recette trouvée
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Commencez par créer ou importer vos premières recettes
-            </p>
-          </motion.div>
-        )}
-      </div>
-
-      {/* Right: Recipe Detail */}
-      <div className="lg:sticky lg:top-24 h-fit">
-        <AnimatePresence mode="wait">
-          {selected ? (
             <motion.div
-              key={selected.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="glass p-6 rounded-2xl space-y-6"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
             >
-              {/* Header */}
-              <div>
-                <div className="flex items-start justify-between mb-2">
-                  <h2 className="text-2xl font-playfair font-bold text-gray-900 dark:text-white">
-                    {selected.name}
-                  </h2>
+              {selected.image_url && (
+                <img
+                  src={selected.image_url}
+                  alt={selected.name}
+                  className="w-full h-64 object-cover rounded-t-2xl"
+                />
+              )}
+
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                      {selected.name}
+                    </h2>
+                    {selected.description && (
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">
+                        {selected.description}
+                      </p>
+                    )}
+                  </div>
                   <button
                     onClick={() => setSelectedRecipe(null)}
-                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                   >
-                    ✕
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
-                
-                {selected.description && (
-                  <p className="text-gray-600 dark:text-gray-400">
-                    {selected.description}
-                  </p>
+
+                <div className="flex items-center gap-6 mb-6">
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <Clock className="w-5 h-5" />
+                    <span>{selected.duration} min</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                    <Users className="w-5 h-5" />
+                    <span>{selected.servings} personnes</span>
+                  </div>
+                </div>
+
+                {selected.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {selected.tags.map(tag => (
+                      <span
+                        key={tag}
+                        className="px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-lg text-sm"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 )}
 
-                <div className="flex items-center gap-4 mt-4 text-sm">
-                  <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
-                    <Clock className="w-4 h-4" />
-                    {selected.duration} min
+                {selected.ingredients.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                      Ingrédients
+                    </h3>
+                    <ul className="space-y-2">
+                      {selected.ingredients.map((ing, idx) => {
+                        const pantryItem = pantryItems.find(
+                          p => p.name.toLowerCase() === ing.name.toLowerCase()
+                        )
+                        const hasEnough = pantryItem && pantryItem.quantity >= ing.quantity
+
+                        return (
+                          <li
+                            key={idx}
+                            className={`flex items-center gap-2 ${
+                              hasEnough
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}
+                          >
+                            <span className="text-lg">•</span>
+                            <span>
+                              {ing.quantity} {ing.unit} {ing.name}
+                            </span>
+                          </li>
+                        )
+                      })}
+                    </ul>
                   </div>
-                  <div className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
-                    <Users className="w-4 h-4" />
-                    {selected.servings} portions
+                )}
+
+                {selected.steps.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                      Instructions
+                    </h3>
+                    <ol className="space-y-3">
+                      {selected.steps.map((step, idx) => (
+                        <li key={idx} className="flex gap-3">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-500 text-white text-sm flex items-center justify-center font-semibold">
+                            {idx + 1}
+                          </span>
+                          <span className="text-gray-700 dark:text-gray-300 flex-1">
+                            {step}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
                   </div>
-                </div>
+                )}
+
+                {selected.source_url && (
+                  <a
+                    href={selected.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-orange-600 dark:text-orange-400 hover:underline mb-6"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Voir la source
+                  </a>
+                )}
+
+                <button
+                  onClick={startCookingMode}
+                  className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <ChefHat className="w-5 h-5" />
+                  Réaliser la recette
+                </button>
               </div>
-
-              {/* Ingredients */}
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
-                  Ingrédients
-                </h3>
-                <div className="space-y-2">
-                  {selected.ingredients.map((ing, i) => {
-                    const pantryItem = pantryItems.find(
-                      p => p.name.toLowerCase() === ing.name.toLowerCase()
-                    )
-                    const hasEnough = pantryItem && pantryItem.quantity >= ing.quantity
-
-                    return (
-                      <div
-                        key={i}
-                        className={`
-                          flex justify-between items-center p-2 rounded-lg
-                          ${hasEnough 
-                            ? 'bg-green-50 dark:bg-green-900/20' 
-                            : 'bg-red-50 dark:bg-red-900/20'
-                          }
-                        `}
-                      >
-                        <span className={`text-sm ${hasEnough ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
-                          {hasEnough ? '✓' : '✗'} {ing.name}
-                        </span>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          {ing.quantity} {ing.unit}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Steps */}
-              <div>
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-3">
-                  Préparation
-                </h3>
-                <div className="space-y-3">
-                  {selected.steps.map((step, i) => (
-                    <div key={i} className="flex gap-3">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center text-sm font-bold">
-                        {i + 1}
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 flex-1">
-                        {step}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Note */}
-              {selected.note && (
-                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-xl border border-yellow-200 dark:border-yellow-800">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    💡 {selected.note}
-                  </p>
-                </div>
-              )}
             </motion.div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="glass p-12 rounded-2xl text-center"
-            >
-              <ChefHat className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
-              <p className="text-gray-600 dark:text-gray-400">
-                Sélectionnez une recette pour voir les détails
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+          </motion.div>
+        )}
 
-      {/* Import Modal */}
-      <AnimatePresence>
+        {/* Import Modal */}
         {showImportModal && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -444,16 +609,12 @@ export default function RecipesTab() {
                 💡 Fonctionne avec : Marmiton, 750g, Cuisine AZ, AllRecipes, et la plupart des sites utilisant le format JSON-LD
               </p>
               
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Collez l'URL d'une recette depuis votre site de cuisine préféré
-              </p>
-
               <input
                 type="url"
                 value={importUrl}
                 onChange={(e) => setImportUrl(e.target.value)}
-                placeholder="https://exemple.com/ma-recette"
-                className="w-full px-4 py-3 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all mb-4"
+                placeholder="https://www.marmiton.org/..."
+                className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none mb-4"
               />
 
               <div className="flex gap-3">
@@ -466,28 +627,16 @@ export default function RecipesTab() {
                 <button
                   onClick={handleImport}
                   disabled={isImporting}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-medium hover:shadow-glow transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-2.5 bg-purple-500 text-white rounded-xl font-medium hover:bg-purple-600 transition-colors disabled:opacity-50"
                 >
-                  {isImporting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Import...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="w-4 h-4" />
-                      Importer
-                    </>
-                  )}
+                  {isImporting ? 'Import...' : 'Importer'}
                 </button>
               </div>
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
 
-      {/* Create Modal */}
-      <AnimatePresence>
+        {/* Create Modal */}
         {showCreateModal && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -503,9 +652,17 @@ export default function RecipesTab() {
               onClick={(e) => e.stopPropagation()}
               className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
             >
-              <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white mb-4">
-                Créer une recette
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white">
+                  Créer une recette
+                </h2>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
               
               <div className="space-y-4">
                 <div>
@@ -564,13 +721,13 @@ export default function RecipesTab() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Instructions
+                    Instructions (une par ligne)
                   </label>
                   <textarea
                     value={formInstructions}
                     onChange={(e) => setFormInstructions(e.target.value)}
-                    placeholder="1. Faire bouillir l'eau&#10;2. Cuire les pâtes..."
-                    rows={4}
+                    placeholder="Faire bouillir l'eau&#10;Cuire les pâtes..."
+                    rows={6}
                     className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
                   />
                 </div>
@@ -606,7 +763,129 @@ export default function RecipesTab() {
             </motion.div>
           </motion.div>
         )}
+
+        {/* Edit Modal */}
+        {showEditModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowEditModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white">
+                  Modifier la recette
+                </h2>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Nom de la recette
+                  </label>
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Durée (min)
+                    </label>
+                    <input
+                      type="number"
+                      value={formDuration}
+                      onChange={(e) => setFormDuration(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Portions
+                    </label>
+                    <input
+                      type="number"
+                      value={formServings}
+                      onChange={(e) => setFormServings(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    rows={2}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Instructions (une par ligne)
+                  </label>
+                  <textarea
+                    value={formInstructions}
+                    onChange={(e) => setFormInstructions(e.target.value)}
+                    rows={6}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Tags (séparés par des virgules)
+                  </label>
+                  <input
+                    type="text"
+                    value={formTags}
+                    onChange={(e) => setFormTags(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 px-4 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleEditRecipe}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  Sauvegarder
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
-    </div>
+    </>
   )
 }
