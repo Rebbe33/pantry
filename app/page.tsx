@@ -180,6 +180,20 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-6 lg:py-8">
+        {/* Page Title */}
+        <motion.h2
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-2xl sm:text-3xl lg:text-4xl font-playfair font-bold text-gray-900 dark:text-white mb-4 sm:mb-6"
+        >
+          {activeTab === 'pantry' && 'Inventaire'}
+          {activeTab === 'recipes' && 'Recettes'}
+          {activeTab === 'menu' && 'Menu de la semaine'}
+          {activeTab === 'shopping' && 'Liste de courses'}
+          {activeTab === 'suggestions' && 'Suggestions'}
+          {activeTab === 'stats' && 'Statistiques'}
+        </motion.h2>
+
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
