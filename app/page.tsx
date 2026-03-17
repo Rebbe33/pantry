@@ -155,7 +155,7 @@ export default function Home() {
                   whileHover={{ y: -2 }}
                   whileTap={{ y: 0 }}
                 >
-                  <Icon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-5 lg:h-5" />
+                  <Icon className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 lg:w-6 lg:h-6" />
                   <span className="hidden xs:inline sm:inline">{tab.label}</span>
                   
                   {tab.id === 'pantry' && expiredCount > 0 && (
