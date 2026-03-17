@@ -373,7 +373,6 @@ export default function PantryTab() {
                           </div>
                         )}
                         </div>
-                      </div>
                         {/* Actions */}
                         <div className="flex gap-1 sm:gap-2 mt-auto">
                           <button
@@ -393,6 +392,7 @@ export default function PantryTab() {
                             <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto" />
                           </button>
                         </div>
+                      </div>
                       </div>
                     </motion.div>
                   )
