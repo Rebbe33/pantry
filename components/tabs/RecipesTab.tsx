@@ -151,19 +151,38 @@ export default function RecipesTab() {
 
       const data = await response.json()
       
-      await addRecipe({
-        user_id: 'temp-user-id',
-        name: data.name,
-        description: data.description || null,
-        duration: data.duration || 30,
-        servings: data.servings || 4,
-        steps: data.steps || [],
-        ingredients: data.ingredients || [],
-        tags: data.tags || [],
-        image_url: data.image_url || null,
-        source_url: importUrl,
-        note: null,
-      })
+      // Create recipe first (without ingredients in the old field)
+      const { data: newRecipe, error } = await supabase
+        .from('pantry_recipes')
+        .insert([{
+          user_id: 'temp-user-id',
+          name: data.name,
+          description: data.description || null,
+          duration: data.duration || 30,
+          servings: data.servings || 4,
+          steps: data.steps || [],
+          tags: data.tags || [],
+          image_url: data.image_url || null,
+          source_url: importUrl,
+          ingredients: [], // Keep empty for legacy field
+          note: null,
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Link ingredients using the new system
+      if (data.ingredients && data.ingredients.length > 0) {
+        for (const ing of data.ingredients) {
+          await linkOrCreateIngredient(
+            newRecipe.id,
+            ing.name,
+            ing.quantity,
+            ing.unit
+          )
+        }
+      }
 
       toast.success('Recette importée et sauvegardée !')
       setShowImportModal(false)
