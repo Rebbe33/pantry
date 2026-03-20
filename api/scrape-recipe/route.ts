@@ -97,13 +97,80 @@ function parseIngredient(text: string) {
     .replace(/\s+/g, ' ')
     .trim()
   
+  // Handle multi-ingredient cases (split on comma or +)
+  if (/[,+]/.test(cleaned) && !/crème\s+fraîche|pâte\s+feuilletée|pâte\s+brisée|pâte\s+sablée|huile\s+d'olive/i.test(cleaned)) {
+    // "Sel, poivre" or "1 oeuf + 1 jaune"
+    // Take only the first ingredient
+    const firstPart = cleaned.split(/[,+]/)[0].trim()
+    if (firstPart) {
+      return parseIngredient(firstPart)
+    }
+  }
+  
+  // Special case: "A café" at the beginning (typo for "c. à café")
+  cleaned = cleaned.replace(/^A\s+café\s+/i, '1 c. à café ')
+  
   // Special cases - return early for common patterns
+  
+  // "X rouleaux de Y" → just "Y" with unit "rouleau(x)"
+  if (/^(\d+[\s\/,.]*)?\s*rouleau(x)?\s+(de|d')\s+/i.test(cleaned)) {
+    const restMatch = cleaned.match(/^([\d\/.,]+)?\s*rouleau(x)?\s+(?:de|d')\s+(.+)$/i)
+    if (restMatch) {
+      const qty = restMatch[1] ? parseFloat(restMatch[1].replace(',', '.')) : 1
+      return {
+        name: capitalizeFirst(cleanIngredientName(restMatch[3])),
+        quantity: qty,
+        unit: 'rouleau(x)',
+      }
+    }
+  }
+  
+  // "botte de X" → "X" with unit "botte(s)"
+  if (/^(\d+[\s\/,.]*)?\s*botte(s)?\s+(de|d')\s+/i.test(cleaned)) {
+    const restMatch = cleaned.match(/^([\d\/.,]+)?\s*botte(s)?\s+(?:de|d')\s+(.+)$/i)
+    if (restMatch) {
+      const qty = restMatch[1] ? parseFloat(restMatch[1].replace(',', '.')) : 1
+      return {
+        name: capitalizeFirst(cleanIngredientName(restMatch[3])),
+        quantity: qty,
+        unit: 'botte(s)',
+      }
+    }
+  }
+  
+  // "pot de X" → "X" with extracted quantity from description if present
+  if (/^(\d+[\s\/,.]*)?\s*pot(s)?\s+(de|d')\s+/i.test(cleaned)) {
+    const restMatch = cleaned.match(/^([\d\/.,]+)?\s*pot(s)?\s+(?:de|d')\s+(.+?)(?:\s+de\s+([\d]+)\s*(cl|ml|g|l))?\s*$/i)
+    if (restMatch) {
+      const qty = restMatch[4] ? parseFloat(restMatch[4]) : (restMatch[1] ? parseFloat(restMatch[1].replace(',', '.')) : 1)
+      const unit = restMatch[5] || 'pot(s)'
+      return {
+        name: capitalizeFirst(cleanIngredientName(restMatch[3])),
+        quantity: qty,
+        unit: unit,
+      }
+    }
+  }
+  
+  // "verre de X" → "X" with unit "verre"
+  if (/^(\d+[\s\/,.]*)?\s*verre(s)?\s+(de|d')\s+/i.test(cleaned)) {
+    const restMatch = cleaned.match(/^([\d\/.,]+)?\s*verre(s)?\s+(?:de|d')\s+(.+?)(?:\s+cuit)?\s*$/i)
+    if (restMatch) {
+      const qty = restMatch[1] ? parseFloat(restMatch[1].replace(',', '.')) : 1
+      return {
+        name: capitalizeFirst(cleanIngredientName(restMatch[3])),
+        quantity: qty,
+        unit: 'verre',
+      }
+    }
+  }
+  
   // "gousse(s) d'ail" → "ail"
   if (/^(\d+[\s\/,.]*)?\s*gousse(s)?\s+(d'|de\s+)?ail/i.test(cleaned)) {
     const qtyMatch = cleaned.match(/^([\d\/.,]+)/)
     return {
       name: 'Ail',
-      quantity: qtyMatch ? parseFloat(qtyMatch[1].replace(',', '.')) : 1,
+      quantity: qtyMatch ? parseQuantity(qtyMatch[1]) : 1,
       unit: 'gousse(s)',
     }
   }
@@ -113,7 +180,7 @@ function parseIngredient(text: string) {
     const restMatch = cleaned.match(/filet(s)?\s+(?:de|du|d')\s+(.+)$/i)
     if (restMatch) {
       return {
-        name: capitalizeFirst(restMatch[2].trim()),
+        name: capitalizeFirst(cleanIngredientName(restMatch[2])),
         quantity: 1,
         unit: 'filet(s)',
       }
@@ -122,42 +189,28 @@ function parseIngredient(text: string) {
   
   // "noix de beurre" → "beurre" (noix = petite quantité)
   if (/^(\d+[\s\/,.]*)?\s*noix\s+de\s+/i.test(cleaned)) {
-    const restMatch = cleaned.match(/noix\s+de\s+(.+)$/i)
+    const restMatch = cleaned.match(/^([\d\/.,]+)?\s*noix\s+de\s+(.+)$/i)
     if (restMatch) {
+      const qty = restMatch[1] ? parseFloat(restMatch[1].replace(',', '.')) : 1
       return {
-        name: capitalizeFirst(restMatch[1].trim()),
-        quantity: 1,
+        name: capitalizeFirst(cleanIngredientName(restMatch[2])),
+        quantity: qty,
         unit: 'noix',
       }
     }
   }
   
   // Main regex - try to extract quantity, unit, and name
-  const match = cleaned.match(/^([\d\s\/.,]+)?\s*(g|kg|mg|ml|l|cl|dl|tasse|verre|c\.?\s*à\s*s\.?|c\.?\s*à\s*c\.?|càs|càc|cs|cc|cuillère(s)?(\s+à\s+(soupe|café))?|c\.\s*à\s*soupe|c\.\s*à\s*café|tsp|tbsp|cup|pincée(s)?|brin(s)?|gousse(s)?|tranche(s)?|morceau(x)?|feuille(s)?|sachet(s)?|boîte(s)?|paquet(s)?|pot(s)?)?\.?\s*(.+)$/i)
+  const match = cleaned.match(/^([\d\s\/.,]+)?\s*(g|kg|mg|ml|l|cl|dl|tasse|verre|c\.?\s*à\s*s\.?|c\.?\s*à\s*c\.?|càs|càc|cs|cc|cuillère(s)?(\s+à\s+(soupe|café))?|c\.\s*à\s*soupe|c\.\s*à\s*café|tsp|tbsp|cup|pincée(s)?|brin(s)?|gousse(s)?|tranche(s)?|rouleau(x)?|morceau(x)?|feuille(s)?|sachet(s)?|boîte(s)?|botte(s)?|paquet(s)?|pot(s)?|brique(s)?)?\.?\s*(.+)$/i)
   
   if (match) {
-    const [, qty, unit, , , , , , , name] = match
+    const [, qty, unit, , , , , , , , name] = match
     
     // Clean the ingredient name
-    let cleanedName = name ? name.trim() : cleaned
+    let cleanedName = name ? cleanIngredientName(name.trim()) : cleanIngredientName(cleaned)
     
-    // Remove articles and prepositions - but be careful with words starting with these letters!
-    // Use word boundaries to avoid "gousse d'ail" → "ousse ail"
-    cleanedName = cleanedName.replace(/^de\s+/i, '')
-    cleanedName = cleanedName.replace(/^d'\s*/i, '')
-    cleanedName = cleanedName.replace(/^du\s+/i, '')
-    cleanedName = cleanedName.replace(/^des\s+/i, '')
-    cleanedName = cleanedName.replace(/^de\s+la\s+/i, '')
-    cleanedName = cleanedName.replace(/^de\s+l'\s*/i, '')
-    cleanedName = cleanedName.replace(/^la\s+/i, '')
-    cleanedName = cleanedName.replace(/^le\s+/i, '')
-    cleanedName = cleanedName.replace(/^l'\s*/i, '')
-    cleanedName = cleanedName.replace(/^un\s+/i, '')
-    cleanedName = cleanedName.replace(/^une\s+/i, '')
-    
-    // Remove quantity words
-    cleanedName = cleanedName.replace(/^quelques\s+/i, '')
-    cleanedName = cleanedName.replace(/^un\s+peu\s+(de\s+)?/i, '')
+    // Remove "cuit" suffix (for rice, etc)
+    cleanedName = cleanedName.replace(/\s+cuit(e)?(s)?$/i, '')
     
     // Normalize unit
     let normalizedUnit = 'pièce(s)'
@@ -188,6 +241,10 @@ function parseIngredient(text: string) {
       else if (/^tranche(s)?$/i.test(unitLower)) {
         normalizedUnit = 'tranche(s)'
       }
+      // Rouleaux
+      else if (/^rouleau(x)?$/i.test(unitLower)) {
+        normalizedUnit = 'rouleau(x)'
+      }
       // Morceaux
       else if (/^morceau(x)?$/i.test(unitLower)) {
         normalizedUnit = 'morceau(x)'
@@ -204,6 +261,10 @@ function parseIngredient(text: string) {
       else if (/^boîte(s)?$/i.test(unitLower)) {
         normalizedUnit = 'boîte(s)'
       }
+      // Bottes
+      else if (/^botte(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'botte(s)'
+      }
       // Paquets
       else if (/^paquet(s)?$/i.test(unitLower)) {
         normalizedUnit = 'paquet(s)'
@@ -211,6 +272,10 @@ function parseIngredient(text: string) {
       // Pots
       else if (/^pot(s)?$/i.test(unitLower)) {
         normalizedUnit = 'pot(s)'
+      }
+      // Briques
+      else if (/^brique(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'brique(s)'
       }
       // Tasse/verre
       else if (/^(tasse|verre|cup)$/i.test(unitLower)) {
@@ -222,59 +287,72 @@ function parseIngredient(text: string) {
       }
     }
     
-    // Parse quantity (handle fractions)
-    let parsedQty = 1
-    if (qty) {
-      const qtyStr = qty.trim().replace(',', '.').replace(/\s+/g, '')
-      
-      // Handle fractions like "1/2" or "1 1/2"
-      if (qtyStr.includes('/')) {
-        const parts = qtyStr.split(/[\s+]/)
-        let total = 0
-        
-        for (const part of parts) {
-          if (part.includes('/')) {
-            const [num, denom] = part.split('/').map(parseFloat)
-            if (denom) total += num / denom
-          } else {
-            total += parseFloat(part) || 0
-          }
-        }
-        
-        parsedQty = total || 1
-      } else {
-        parsedQty = parseFloat(qtyStr) || 1
-      }
-    }
-    
     return {
       name: capitalizeFirst(cleanedName),
-      quantity: parsedQty,
+      quantity: parseQuantity(qty),
       unit: normalizedUnit,
     }
   }
   
   // If no match, clean the whole text as name
-  let cleanedName = cleaned
-  cleanedName = cleanedName.replace(/^de\s+/i, '')
-  cleanedName = cleanedName.replace(/^d'\s*/i, '')
-  cleanedName = cleanedName.replace(/^du\s+/i, '')
-  cleanedName = cleanedName.replace(/^des\s+/i, '')
-  cleanedName = cleanedName.replace(/^de\s+la\s+/i, '')
-  cleanedName = cleanedName.replace(/^de\s+l'\s*/i, '')
-  cleanedName = cleanedName.replace(/^la\s+/i, '')
-  cleanedName = cleanedName.replace(/^le\s+/i, '')
-  cleanedName = cleanedName.replace(/^l'\s*/i, '')
-  cleanedName = cleanedName.replace(/^un\s+/i, '')
-  cleanedName = cleanedName.replace(/^une\s+/i, '')
-  cleanedName = cleanedName.replace(/^quelques\s+/i, '')
-  cleanedName = cleanedName.replace(/^un\s+peu\s+(de\s+)?/i, '')
+  let cleanedName = cleanIngredientName(cleaned)
+  cleanedName = cleanedName.replace(/\s+cuit(e)?(s)?$/i, '')
   
   return {
     name: capitalizeFirst(cleanedName),
     quantity: 1,
     unit: 'pièce(s)',
   }
+}
+
+// Helper to clean ingredient name
+function cleanIngredientName(name: string): string {
+  let cleaned = name.trim()
+  
+  // Remove articles and prepositions
+  cleaned = cleaned.replace(/^de\s+/i, '')
+  cleaned = cleaned.replace(/^d'\s*/i, '')
+  cleaned = cleaned.replace(/^du\s+/i, '')
+  cleaned = cleaned.replace(/^des\s+/i, '')
+  cleaned = cleaned.replace(/^de\s+la\s+/i, '')
+  cleaned = cleaned.replace(/^de\s+l'\s*/i, '')
+  cleaned = cleaned.replace(/^la\s+/i, '')
+  cleaned = cleaned.replace(/^le\s+/i, '')
+  cleaned = cleaned.replace(/^l'\s*/i, '')
+  cleaned = cleaned.replace(/^un\s+/i, '')
+  cleaned = cleaned.replace(/^une\s+/i, '')
+  
+  // Remove quantity words
+  cleaned = cleaned.replace(/^quelques\s+/i, '')
+  cleaned = cleaned.replace(/^un\s+peu\s+(de\s+)?/i, '')
+  
+  return cleaned.trim()
+}
+
+// Helper to parse quantity (handle fractions)
+function parseQuantity(qtyStr?: string): number {
+  if (!qtyStr) return 1
+  
+  const cleaned = qtyStr.trim().replace(',', '.').replace(/\s+/g, '')
+  
+  // Handle fractions like "1/2" or "1 1/2"
+  if (cleaned.includes('/')) {
+    const parts = cleaned.split(/[+\s]/).filter(Boolean)
+    let total = 0
+    
+    for (const part of parts) {
+      if (part.includes('/')) {
+        const [num, denom] = part.split('/').map(parseFloat)
+        if (denom) total += num / denom
+      } else {
+        total += parseFloat(part) || 0
+      }
+    }
+    
+    return total || 1
+  }
+  
+  return parseFloat(cleaned) || 1
 }
 
 // Helper to capitalize first letter
