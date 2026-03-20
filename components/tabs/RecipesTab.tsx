@@ -61,6 +61,8 @@ export default function RecipesTab() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showCookingMode, setShowCookingMode] = useState(false)
+  const [showImportPreview, setShowImportPreview] = useState(false)
+  const [importPreviewData, setImportPreviewData] = useState<any>(null)
   const [currentStep, setCurrentStep] = useState(0)
   const [importUrl, setImportUrl] = useState('')
   const [isImporting, setIsImporting] = useState(false)
@@ -151,18 +153,34 @@ export default function RecipesTab() {
 
       const data = await response.json()
       
+      // Show preview instead of importing directly
+      setImportPreviewData(data)
+      setShowImportModal(false)
+      setShowImportPreview(true)
+    } catch (error) {
+      console.error('Import error:', error)
+      toast.error('Impossible d\'importer cette recette')
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  const confirmImport = async () => {
+    if (!importPreviewData) return
+
+    try {
       // Create recipe first (without ingredients in the old field)
       const { data: newRecipe, error } = await supabase
         .from('pantry_recipes')
         .insert([{
           user_id: 'temp-user-id',
-          name: data.name,
-          description: data.description || null,
-          duration: data.duration || 30,
-          servings: data.servings || 4,
-          steps: data.steps || [],
-          tags: data.tags || [],
-          image_url: data.image_url || null,
+          name: importPreviewData.name,
+          description: importPreviewData.description || null,
+          duration: importPreviewData.duration || 30,
+          servings: importPreviewData.servings || 4,
+          steps: importPreviewData.steps || [],
+          tags: importPreviewData.tags || [],
+          image_url: importPreviewData.image_url || null,
           source_url: importUrl,
           ingredients: [], // Keep empty for legacy field
           note: null,
@@ -173,8 +191,8 @@ export default function RecipesTab() {
       if (error) throw error
 
       // Link ingredients using the new system
-      if (data.ingredients && data.ingredients.length > 0) {
-        for (const ing of data.ingredients) {
+      if (importPreviewData.ingredients && importPreviewData.ingredients.length > 0) {
+        for (const ing of importPreviewData.ingredients) {
           await linkOrCreateIngredient(
             newRecipe.id,
             ing.name,
@@ -185,14 +203,28 @@ export default function RecipesTab() {
       }
 
       toast.success('Recette importée et sauvegardée !')
-      setShowImportModal(false)
+      setShowImportPreview(false)
+      setImportPreviewData(null)
       setImportUrl('')
     } catch (error) {
       console.error('Import error:', error)
       toast.error('Impossible d\'importer cette recette')
-    } finally {
-      setIsImporting(false)
     }
+  }
+
+  const updatePreviewIngredient = (index: number, field: 'name' | 'quantity' | 'unit', value: string | number) => {
+    if (!importPreviewData) return
+    
+    const updated = [...importPreviewData.ingredients]
+    updated[index] = { ...updated[index], [field]: value }
+    setImportPreviewData({ ...importPreviewData, ingredients: updated })
+  }
+
+  const removePreviewIngredient = (index: number) => {
+    if (!importPreviewData) return
+    
+    const updated = importPreviewData.ingredients.filter((_: any, i: number) => i !== index)
+    setImportPreviewData({ ...importPreviewData, ingredients: updated })
   }
 
   const handleDelete = async (id: string, name: string) => {
@@ -886,7 +918,134 @@ export default function RecipesTab() {
                   disabled={isImporting}
                   className="flex-1 px-4 py-2.5 bg-purple-500 text-white rounded-xl font-medium hover:bg-purple-600 transition-colors disabled:opacity-50"
                 >
-                  {isImporting ? 'Import...' : 'Importer'}
+                  {isImporting ? 'Import...' : 'Prévisualiser'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Import Preview Modal */}
+        {showImportPreview && importPreviewData && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowImportPreview(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-playfair font-bold text-gray-900 dark:text-white">
+                  Vérifier avant import
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowImportPreview(false)
+                    setImportPreviewData(null)
+                  }}
+                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl text-sm text-orange-800 dark:text-orange-200">
+                ⚠️ Vérifiez et corrigez les ingrédients avant de valider l'import
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                    {importPreviewData.name}
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {importPreviewData.duration} min • {importPreviewData.servings} personnes
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    Ingrédients ({importPreviewData.ingredients?.length || 0})
+                    <span className="text-xs font-normal text-gray-500">
+                      Modifiez si nécessaire
+                    </span>
+                  </h4>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {importPreviewData.ingredients?.map((ing: any, idx: number) => (
+                      <div key={idx} className="flex gap-2 items-center bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg">
+                        <input
+                          type="text"
+                          value={ing.name}
+                          onChange={(e) => updatePreviewIngredient(idx, 'name', e.target.value)}
+                          className="flex-1 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                          placeholder="Nom"
+                        />
+                        <input
+                          type="number"
+                          value={ing.quantity}
+                          onChange={(e) => updatePreviewIngredient(idx, 'quantity', parseFloat(e.target.value) || 1)}
+                          className="w-20 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                          placeholder="Qté"
+                        />
+                        <select
+                          value={ing.unit}
+                          onChange={(e) => updatePreviewIngredient(idx, 'unit', e.target.value)}
+                          className="w-24 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                        >
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="ml">ml</option>
+                          <option value="l">l</option>
+                          <option value="cl">cl</option>
+                          <option value="pièce(s)">pièce(s)</option>
+                          <option value="c. à soupe">c. à soupe</option>
+                          <option value="c. à café">c. à café</option>
+                          <option value="gousse(s)">gousse(s)</option>
+                          <option value="brin(s)">brin(s)</option>
+                          <option value="tranche(s)">tranche(s)</option>
+                          <option value="pincée(s)">pincée(s)</option>
+                          <option value="botte(s)">botte(s)</option>
+                          <option value="pot(s)">pot(s)</option>
+                          <option value="sachet(s)">sachet(s)</option>
+                          <option value="filet(s)">filet(s)</option>
+                          <option value="noix">noix</option>
+                          <option value="verre">verre</option>
+                          <option value="tasse">tasse</option>
+                        </select>
+                        <button
+                          onClick={() => removePreviewIngredient(idx)}
+                          className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowImportPreview(false)
+                    setShowImportModal(true)
+                  }}
+                  className="flex-1 px-4 py-2.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Retour
+                </button>
+                <button
+                  onClick={confirmImport}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all"
+                >
+                  Confirmer l'import
                 </button>
               </div>
             </motion.div>
