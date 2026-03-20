@@ -150,9 +150,6 @@ export function useDataPersistence() {
     setRecipes(recipesWithIngredients)
   }
 
-    setRecipes(data || [])
-  }
-
   const loadMenuItems = async () => {
     const { data, error } = await supabase
       .from('pantry_menu_items')
