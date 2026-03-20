@@ -14,6 +14,17 @@ export interface PantryItem {
   updated_at: string
 }
 
+export interface RecipeIngredient {
+  id: string
+  recipe_id: string
+  pantry_item_id: string
+  pantry_item?: PantryItem  // Populated when fetched with join
+  quantity: number
+  unit: string
+  created_at: string
+  updated_at: string
+}
+
 export interface Recipe {
   id: string
   user_id: string
@@ -22,7 +33,8 @@ export interface Recipe {
   duration: number
   servings: number
   tags: string[]
-  ingredients: { name: string; quantity: number; unit: string }[]
+  ingredients: { name: string; quantity: number; unit: string }[]  // Legacy field, keep for now
+  recipe_ingredients?: RecipeIngredient[]  // New linked ingredients
   steps: string[]
   note: string | null
   image_url: string | null
@@ -68,6 +80,11 @@ interface AppStore {
   addRecipe: (recipe: Omit<Recipe, 'id' | 'created_at' | 'updated_at'>) => Promise<void>
   updateRecipe: (id: string, updates: Partial<Recipe>) => Promise<void>
   deleteRecipe: (id: string) => Promise<void>
+  addRecipeIngredient: (recipeId: string, pantryItemId: string, quantity: number, unit: string) => Promise<void>
+  updateRecipeIngredient: (id: string, quantity: number, unit: string) => Promise<void>
+  deleteRecipeIngredient: (id: string) => Promise<void>
+  linkOrCreateIngredient: (recipeName: string, ingredientName: string, quantity: number, unit: string) => Promise<string>
+  deductIngredientsFromPantry: (recipeId: string) => Promise<void>
   
   // Menu
   menuItems: MenuItem[]
@@ -190,6 +207,112 @@ export const useStore = create<AppStore>((set, get) => ({
     set({
       recipes: get().recipes.filter(recipe => recipe.id !== id)
     })
+  },
+
+  addRecipeIngredient: async (recipeId, pantryItemId, quantity, unit) => {
+    const { error } = await supabase
+      .from('pantry_recipe_ingredients')
+      .insert([{
+        recipe_id: recipeId,
+        pantry_item_id: pantryItemId,
+        quantity,
+        unit
+      }])
+    
+    if (error) throw error
+  },
+
+  updateRecipeIngredient: async (id, quantity, unit) => {
+    const { error } = await supabase
+      .from('pantry_recipe_ingredients')
+      .update({ quantity, unit, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    
+    if (error) throw error
+  },
+
+  deleteRecipeIngredient: async (id) => {
+    const { error } = await supabase
+      .from('pantry_recipe_ingredients')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw error
+  },
+
+  linkOrCreateIngredient: async (recipeId, ingredientName, quantity, unit) => {
+    // Try to find existing pantry item
+    const { data: existing } = await supabase
+      .from('pantry_items')
+      .select('id')
+      .ilike('name', ingredientName)
+      .limit(1)
+      .single()
+    
+    let pantryItemId: string
+    
+    if (existing) {
+      pantryItemId = existing.id
+    } else {
+      // Create new pantry item with quantity 0
+      const { data: newItem, error } = await supabase
+        .from('pantry_items')
+        .insert([{
+          user_id: 'temp-user-id',
+          name: ingredientName,
+          quantity: 0,
+          unit: unit,
+          location: 'Placard',
+          category: 'Autre',
+          expiry_date: null
+        }])
+        .select()
+        .single()
+      
+      if (error) throw error
+      pantryItemId = newItem.id
+      
+      // Add to local state
+      set({
+        pantryItems: [...get().pantryItems, newItem]
+      })
+    }
+    
+    // Link to recipe
+    await get().addRecipeIngredient(recipeId, pantryItemId, quantity, unit)
+    
+    return pantryItemId
+  },
+
+  deductIngredientsFromPantry: async (recipeId) => {
+    // Get recipe ingredients
+    const { data: ingredients, error } = await supabase
+      .from('pantry_recipe_ingredients')
+      .select('pantry_item_id, quantity, unit')
+      .eq('recipe_id', recipeId)
+    
+    if (error) throw error
+    if (!ingredients) return
+    
+    // Deduct each ingredient
+    for (const ing of ingredients) {
+      const pantryItem = get().pantryItems.find(item => item.id === ing.pantry_item_id)
+      if (!pantryItem) continue
+      
+      // Calculate new quantity (handle unit conversion)
+      let deduction = ing.quantity
+      if (pantryItem.unit !== ing.unit) {
+        // Simple conversions
+        if (pantryItem.unit === 'kg' && ing.unit === 'g') deduction = ing.quantity / 1000
+        if (pantryItem.unit === 'g' && ing.unit === 'kg') deduction = ing.quantity * 1000
+        if (pantryItem.unit === 'l' && ing.unit === 'ml') deduction = ing.quantity / 1000
+        if (pantryItem.unit === 'ml' && ing.unit === 'l') deduction = ing.quantity * 1000
+      }
+      
+      const newQuantity = Math.max(0, pantryItem.quantity - deduction)
+      
+      await get().updatePantryItem(ing.pantry_item_id, { quantity: newQuantity })
+    }
   },
   
   // Menu
