@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@/lib/store'
+import { supabase } from '@/lib/supabase'
+import { getRecipeIngredients, hasEnoughIngredient } from '@/lib/recipe-helpers'
 import { 
   Plus, 
   Search, 
@@ -33,8 +35,24 @@ const RECIPE_CATEGORIES = [
   'Boisson',
 ]
 
+interface IngredientInput {
+  pantry_item_id: string
+  pantry_item_name: string
+  quantity: string
+  unit: string
+}
+
 export default function RecipesTab() {
-  const { recipes, pantryItems, deleteRecipe, addRecipe, updateRecipe } = useStore()
+  const { 
+    recipes, 
+    pantryItems,
+    deleteRecipe, 
+    addRecipe, 
+    updateRecipe,
+    linkOrCreateIngredient,
+    deductIngredientsFromPantry
+  } = useStore()
+  
   const [search, setSearch] = useState('')
   const [selectedRecipe, setSelectedRecipe] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -55,7 +73,11 @@ export default function RecipesTab() {
   const [formInstructions, setFormInstructions] = useState('')
   const [formTags, setFormTags] = useState('')
   const [formCategories, setFormCategories] = useState<string[]>([])
-  const [formIngredients, setFormIngredients] = useState('')
+  const [formIngredients, setFormIngredients] = useState<IngredientInput[]>([])
+  
+  // Autocomplete
+  const [ingredientSearch, setIngredientSearch] = useState('')
+  const [showIngredientDropdown, setShowIngredientDropdown] = useState(false)
 
   const filtered = recipes.filter(recipe => {
     const matchesSearch = recipe.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -64,12 +86,10 @@ export default function RecipesTab() {
     return matchesSearch && matchesCategory
   })
 
-  // Get all recipe categories used
   const usedCategories = Array.from(new Set(
     recipes.flatMap(r => r.tags.filter(t => RECIPE_CATEGORIES.includes(t)))
   )).sort()
 
-  // Group by category
   const recipesByCategory = filtered.reduce((acc, recipe) => {
     const recipeCategories = recipe.tags.filter(t => RECIPE_CATEGORIES.includes(t))
     
@@ -88,61 +108,28 @@ export default function RecipesTab() {
   const selected = recipes.find(r => r.id === selectedRecipe)
 
   const canMakeRecipe = (recipe: typeof recipes[0]) => {
-    return recipe.ingredients.every(ing => {
-      const pantryItem = pantryItems.find(
-        p => p.name.toLowerCase() === ing.name.toLowerCase()
-      )
-      if (!pantryItem) return false
-      
-      // Convert to same unit for comparison
-      if (pantryItem.unit === ing.unit) {
-        return pantryItem.quantity >= ing.quantity
+    const ingredients = getRecipeIngredients(recipe)
+    return ingredients.every(ing => {
+      if (ing.pantry_item_id) {
+        return hasEnoughIngredient(
+          { quantity: ing.quantity, unit: ing.unit, pantry_item_id: ing.pantry_item_id },
+          pantryItems
+        )
       }
-      
-      // Simple conversions
-      if (pantryItem.unit === 'kg' && ing.unit === 'g') {
-        return pantryItem.quantity * 1000 >= ing.quantity
-      }
-      if (pantryItem.unit === 'g' && ing.unit === 'kg') {
-        return pantryItem.quantity >= ing.quantity * 1000
-      }
-      if (pantryItem.unit === 'l' && ing.unit === 'ml') {
-        return pantryItem.quantity * 1000 >= ing.quantity
-      }
-      if (pantryItem.unit === 'ml' && ing.unit === 'l') {
-        return pantryItem.quantity >= ing.quantity * 1000
-      }
-      
-      // For different units, just check if we have the item
-      return pantryItem.quantity > 0
+      return false
     })
   }
 
   const getMissingIngredients = (recipe: typeof recipes[0]) => {
-    return recipe.ingredients.filter(ing => {
-      const pantryItem = pantryItems.find(
-        p => p.name.toLowerCase() === ing.name.toLowerCase()
-      )
-      if (!pantryItem) return true
-      
-      if (pantryItem.unit === ing.unit) {
-        return pantryItem.quantity < ing.quantity
+    const ingredients = getRecipeIngredients(recipe)
+    return ingredients.filter(ing => {
+      if (ing.pantry_item_id) {
+        return !hasEnoughIngredient(
+          { quantity: ing.quantity, unit: ing.unit, pantry_item_id: ing.pantry_item_id },
+          pantryItems
+        )
       }
-      
-      if (pantryItem.unit === 'kg' && ing.unit === 'g') {
-        return pantryItem.quantity * 1000 < ing.quantity
-      }
-      if (pantryItem.unit === 'g' && ing.unit === 'kg') {
-        return pantryItem.quantity < ing.quantity * 1000
-      }
-      if (pantryItem.unit === 'l' && ing.unit === 'ml') {
-        return pantryItem.quantity * 1000 < ing.quantity
-      }
-      if (pantryItem.unit === 'ml' && ing.unit === 'l') {
-        return pantryItem.quantity < ing.quantity * 1000
-      }
-      
-      return pantryItem.quantity === 0
+      return true
     })
   }
 
@@ -201,25 +188,6 @@ export default function RecipesTab() {
     }
   }
 
-  const parseIngredients = (text: string) => {
-    return text.split('\n').filter(Boolean).map(line => {
-      // Parse "200g farine" or "2 oeufs" or "1l lait"
-      const match = line.match(/^([\d.,]+)\s*([a-zA-Zéèê]+)?\s+(.+)$/)
-      if (match) {
-        return {
-          quantity: parseFloat(match[1].replace(',', '.')),
-          unit: match[2] || 'pièce(s)',
-          name: match[3].trim()
-        }
-      }
-      return {
-        quantity: 1,
-        unit: 'pièce(s)',
-        name: line.trim()
-      }
-    })
-  }
-
   const handleCreateRecipe = async () => {
     if (!formName.trim()) {
       toast.error('Le nom est requis')
@@ -229,24 +197,44 @@ export default function RecipesTab() {
     try {
       const allTags = [...formCategories, ...formTags.split(',').map(t => t.trim()).filter(Boolean)]
       
-      await addRecipe({
-        user_id: 'temp-user-id',
-        name: formName.trim(),
-        duration: parseInt(formDuration) || 30,
-        servings: parseInt(formServings) || 4,
-        description: formDescription.trim() || null,
-        steps: formInstructions.trim().split('\n').filter(Boolean),
-        note: null,
-        tags: allTags,
-        ingredients: parseIngredients(formIngredients),
-        image_url: null,
-        source_url: null,
-      })
+      // Create recipe first
+      const { data: newRecipe, error } = await supabase
+        .from('pantry_recipes')
+        .insert([{
+          user_id: 'temp-user-id',
+          name: formName.trim(),
+          duration: parseInt(formDuration) || 30,
+          servings: parseInt(formServings) || 4,
+          description: formDescription.trim() || null,
+          steps: formInstructions.trim().split('\n').filter(Boolean),
+          note: null,
+          tags: allTags,
+          ingredients: [],
+          image_url: null,
+          source_url: null,
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Link ingredients
+      for (const ing of formIngredients) {
+        if (ing.pantry_item_id && ing.quantity) {
+          await linkOrCreateIngredient(
+            newRecipe.id,
+            ing.pantry_item_name,
+            parseFloat(ing.quantity),
+            ing.unit
+          )
+        }
+      }
 
       toast.success('Recette créée !')
       setShowCreateModal(false)
       resetForm()
     } catch (error) {
+      console.error('Create error:', error)
       toast.error('Erreur lors de la création')
     }
   }
@@ -264,7 +252,6 @@ export default function RecipesTab() {
         description: formDescription.trim() || null,
         steps: formInstructions.trim().split('\n').filter(Boolean),
         tags: allTags,
-        ingredients: parseIngredients(formIngredients),
       })
 
       toast.success('Recette modifiée !')
@@ -283,7 +270,8 @@ export default function RecipesTab() {
     setFormInstructions('')
     setFormTags('')
     setFormCategories([])
-    setFormIngredients('')
+    setFormIngredients([])
+    setIngredientSearch('')
   }
 
   const openEditModal = (recipe: typeof recipes[0]) => {
@@ -298,7 +286,14 @@ export default function RecipesTab() {
     
     setFormCategories(categories)
     setFormTags(otherTags.join(', '))
-    setFormIngredients(recipe.ingredients.map(i => `${i.quantity}${i.unit} ${i.name}`).join('\n'))
+    
+    const ingredients = getRecipeIngredients(recipe)
+    setFormIngredients(ingredients.map(ing => ({
+      pantry_item_id: ing.pantry_item_id || '',
+      pantry_item_name: ing.name,
+      quantity: String(ing.quantity),
+      unit: ing.unit
+    })))
     
     setSelectedRecipe(recipe.id)
     setShowEditModal(true)
@@ -309,10 +304,32 @@ export default function RecipesTab() {
     setShowCookingMode(true)
   }
 
+  const finishCooking = async () => {
+    if (!selected) return
+    
+    const shouldDeduct = confirm('Voulez-vous déduire les ingrédients utilisés de votre inventaire ?')
+    
+    if (shouldDeduct) {
+      try {
+        await deductIngredientsFromPantry(selected.id)
+        toast.success('Ingrédients déduits de l\'inventaire ! Bon appétit ! 🎉')
+      } catch (error) {
+        toast.error('Erreur lors de la déduction')
+      }
+    } else {
+      toast.success('Recette terminée ! Bon appétit ! 🎉')
+    }
+    
+    setShowCookingMode(false)
+    setSelectedRecipe(null)
+  }
+
   const getIngredientFromStep = (stepText: string) => {
     if (!selected) return []
     
-    return selected.ingredients.filter(ing => {
+    const ingredients = getRecipeIngredients(selected)
+    
+    return ingredients.filter(ing => {
       const stepLower = stepText.toLowerCase()
       const ingredientLower = ing.name.toLowerCase()
       
@@ -330,9 +347,40 @@ export default function RecipesTab() {
     }
   }
 
+  const addIngredient = (item: typeof pantryItems[0]) => {
+    setFormIngredients([...formIngredients, {
+      pantry_item_id: item.id,
+      pantry_item_name: item.name,
+      quantity: '1',
+      unit: item.unit
+    }])
+    setIngredientSearch('')
+    setShowIngredientDropdown(false)
+  }
+
+  const removeIngredient = (index: number) => {
+    setFormIngredients(formIngredients.filter((_, i) => i !== index))
+  }
+
+  const updateIngredientQuantity = (index: number, quantity: string) => {
+    const updated = [...formIngredients]
+    updated[index].quantity = quantity
+    setFormIngredients(updated)
+  }
+
+  const updateIngredientUnit = (index: number, unit: string) => {
+    const updated = [...formIngredients]
+    updated[index].unit = unit
+    setFormIngredients(updated)
+  }
+
+  const filteredPantryItems = pantryItems.filter(item =>
+    item.name.toLowerCase().includes(ingredientSearch.toLowerCase()) &&
+    !formIngredients.some(ing => ing.pantry_item_id === item.id)
+  )
+
   return (
     <>
-      {/* Cooking Mode */}
       {showCookingMode && selected ? (
         <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 dark:from-gray-900 dark:to-gray-800 p-4">
           <div className="max-w-2xl mx-auto">
@@ -418,11 +466,7 @@ export default function RecipesTab() {
                 </button>
               ) : (
                 <button
-                  onClick={() => {
-                    setShowCookingMode(false)
-                    setSelectedRecipe(null)
-                    toast.success('Recette terminée ! Bon appétit ! 🎉')
-                  }}
+                  onClick={finishCooking}
                   className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
                 >
                   <Check className="w-5 h-5" />
@@ -630,6 +674,8 @@ export default function RecipesTab() {
         </div>
       )}
 
+      {/* Modals suivent... (trop long pour un seul message, je continue) */}
+
       {/* Recipe Detail Modal */}
       <AnimatePresence>
         {selectedRecipe && selected && !showCookingMode && (
@@ -699,33 +745,19 @@ export default function RecipesTab() {
                   </div>
                 )}
 
-                {selected.ingredients.length > 0 && (
+                {getRecipeIngredients(selected).length > 0 && (
                   <div className="mb-6">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
                       Ingrédients
                     </h3>
                     <ul className="space-y-2">
-                      {selected.ingredients.map((ing, idx) => {
-                        const pantryItem = pantryItems.find(
-                          p => p.name.toLowerCase() === ing.name.toLowerCase()
-                        )
-                        
-                        let hasEnough = false
-                        if (pantryItem) {
-                          if (pantryItem.unit === ing.unit) {
-                            hasEnough = pantryItem.quantity >= ing.quantity
-                          } else if (pantryItem.unit === 'kg' && ing.unit === 'g') {
-                            hasEnough = pantryItem.quantity * 1000 >= ing.quantity
-                          } else if (pantryItem.unit === 'g' && ing.unit === 'kg') {
-                            hasEnough = pantryItem.quantity >= ing.quantity * 1000
-                          } else if (pantryItem.unit === 'l' && ing.unit === 'ml') {
-                            hasEnough = pantryItem.quantity * 1000 >= ing.quantity
-                          } else if (pantryItem.unit === 'ml' && ing.unit === 'l') {
-                            hasEnough = pantryItem.quantity >= ing.quantity * 1000
-                          } else {
-                            hasEnough = pantryItem.quantity > 0
-                          }
-                        }
+                      {getRecipeIngredients(selected).map((ing, idx) => {
+                        const hasEnough = ing.pantry_item_id 
+                          ? hasEnoughIngredient(
+                              { quantity: ing.quantity, unit: ing.unit, pantry_item_id: ing.pantry_item_id },
+                              pantryItems
+                            )
+                          : false
 
                         return (
                           <li
@@ -947,17 +979,80 @@ export default function RecipesTab() {
                   />
                 </div>
 
+                {/* Ingredients with Autocomplete */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Ingrédients (une par ligne : "200g farine")
+                    Ingrédients
                   </label>
-                  <textarea
-                    value={formIngredients}
-                    onChange={(e) => setFormIngredients(e.target.value)}
-                    placeholder="200g farine&#10;2 oeufs&#10;1l lait"
-                    rows={4}
-                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
-                  />
+                  
+                  {/* Ingredient List */}
+                  <div className="space-y-2 mb-3">
+                    {formIngredients.map((ing, idx) => (
+                      <div key={idx} className="flex gap-2 items-center bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg">
+                        <div className="flex-1 text-sm text-gray-700 dark:text-gray-300">
+                          {ing.pantry_item_name}
+                        </div>
+                        <input
+                          type="number"
+                          value={ing.quantity}
+                          onChange={(e) => updateIngredientQuantity(idx, e.target.value)}
+                          className="w-16 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                          placeholder="1"
+                        />
+                        <select
+                          value={ing.unit}
+                          onChange={(e) => updateIngredientUnit(idx, e.target.value)}
+                          className="w-20 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                        >
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="ml">ml</option>
+                          <option value="l">l</option>
+                          <option value="pièce(s)">pièce(s)</option>
+                          <option value="c. à soupe">c. à soupe</option>
+                          <option value="c. à café">c. à café</option>
+                        </select>
+                        <button
+                          onClick={() => removeIngredient(idx)}
+                          className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Autocomplete Input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={ingredientSearch}
+                      onChange={(e) => {
+                        setIngredientSearch(e.target.value)
+                        setShowIngredientDropdown(true)
+                      }}
+                      onFocus={() => setShowIngredientDropdown(true)}
+                      placeholder="Ajouter un ingrédient de l'inventaire..."
+                      className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                    
+                    {showIngredientDropdown && ingredientSearch && filteredPantryItems.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                        {filteredPantryItems.slice(0, 5).map(item => (
+                          <button
+                            key={item.id}
+                            onClick={() => addIngredient(item)}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm"
+                          >
+                            <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Stock: {item.quantity} {item.unit} • {item.location}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -1108,14 +1203,73 @@ export default function RecipesTab() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Ingrédients (une par ligne : "200g farine")
+                    Ingrédients
                   </label>
-                  <textarea
-                    value={formIngredients}
-                    onChange={(e) => setFormIngredients(e.target.value)}
-                    rows={4}
-                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
-                  />
+                  <div className="space-y-2 mb-3">
+                    {formIngredients.map((ing, idx) => (
+                      <div key={idx} className="flex gap-2 items-center bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg">
+                        <div className="flex-1 text-sm text-gray-700 dark:text-gray-300">
+                          {ing.pantry_item_name}
+                        </div>
+                        <input
+                          type="number"
+                          value={ing.quantity}
+                          onChange={(e) => updateIngredientQuantity(idx, e.target.value)}
+                          className="w-16 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                        />
+                        <select
+                          value={ing.unit}
+                          onChange={(e) => updateIngredientUnit(idx, e.target.value)}
+                          className="w-20 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                        >
+                          <option value="g">g</option>
+                          <option value="kg">kg</option>
+                          <option value="ml">ml</option>
+                          <option value="l">l</option>
+                          <option value="pièce(s)">pièce(s)</option>
+                          <option value="c. à soupe">c. à soupe</option>
+                          <option value="c. à café">c. à café</option>
+                        </select>
+                        <button
+                          onClick={() => removeIngredient(idx)}
+                          className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={ingredientSearch}
+                      onChange={(e) => {
+                        setIngredientSearch(e.target.value)
+                        setShowIngredientDropdown(true)
+                      }}
+                      onFocus={() => setShowIngredientDropdown(true)}
+                      placeholder="Ajouter un ingrédient..."
+                      className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                    />
+                    
+                    {showIngredientDropdown && ingredientSearch && filteredPantryItems.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                        {filteredPantryItems.slice(0, 5).map(item => (
+                          <button
+                            key={item.id}
+                            onClick={() => addIngredient(item)}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm"
+                          >
+                            <div className="font-medium text-gray-900 dark:text-white">{item.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Stock: {item.quantity} {item.unit} • {item.location}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -1132,7 +1286,7 @@ export default function RecipesTab() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tags supplémentaires (séparés par des virgules)
+                    Tags supplémentaires
                   </label>
                   <input
                     type="text"
