@@ -21,12 +21,24 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+const RECIPE_CATEGORIES = [
+  'Entrée',
+  'Plat principal',
+  'Dessert',
+  'Apéritif',
+  'Petit-déjeuner',
+  'Goûter',
+  'Accompagnement',
+  'Sauce',
+  'Boisson',
+]
+
 export default function RecipesTab() {
   const { recipes, pantryItems, deleteRecipe, addRecipe, updateRecipe } = useStore()
   const [search, setSearch] = useState('')
   const [selectedRecipe, setSelectedRecipe] = useState<string | null>(null)
-  const [selectedTag, setSelectedTag] = useState<string>('all')
-  const [openTags, setOpenTags] = useState<Record<string, boolean>>({})
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({})
   const [showImportModal, setShowImportModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -35,33 +47,39 @@ export default function RecipesTab() {
   const [importUrl, setImportUrl] = useState('')
   const [isImporting, setIsImporting] = useState(false)
 
-  // Create form state
+  // Create/Edit form state
   const [formName, setFormName] = useState('')
   const [formDuration, setFormDuration] = useState('')
   const [formServings, setFormServings] = useState('4')
   const [formDescription, setFormDescription] = useState('')
   const [formInstructions, setFormInstructions] = useState('')
   const [formTags, setFormTags] = useState('')
+  const [formCategories, setFormCategories] = useState<string[]>([])
+  const [formIngredients, setFormIngredients] = useState('')
 
   const filtered = recipes.filter(recipe => {
     const matchesSearch = recipe.name.toLowerCase().includes(search.toLowerCase()) ||
       recipe.tags.some(tag => tag.toLowerCase().includes(search.toLowerCase()))
-    const matchesTag = selectedTag === 'all' || recipe.tags.includes(selectedTag)
-    return matchesSearch && matchesTag
+    const matchesCategory = selectedCategory === 'all' || recipe.tags.includes(selectedCategory)
+    return matchesSearch && matchesCategory
   })
 
-  // Get all unique tags
-  const allTags = Array.from(new Set(recipes.flatMap(r => r.tags))).sort()
+  // Get all recipe categories used
+  const usedCategories = Array.from(new Set(
+    recipes.flatMap(r => r.tags.filter(t => RECIPE_CATEGORIES.includes(t)))
+  )).sort()
 
-  // Group by tag
-  const recipesByTag = filtered.reduce((acc, recipe) => {
-    if (recipe.tags.length === 0) {
+  // Group by category
+  const recipesByCategory = filtered.reduce((acc, recipe) => {
+    const recipeCategories = recipe.tags.filter(t => RECIPE_CATEGORIES.includes(t))
+    
+    if (recipeCategories.length === 0) {
       if (!acc['Sans catégorie']) acc['Sans catégorie'] = []
       acc['Sans catégorie'].push(recipe)
     } else {
-      recipe.tags.forEach(tag => {
-        if (!acc[tag]) acc[tag] = []
-        acc[tag].push(recipe)
+      recipeCategories.forEach(cat => {
+        if (!acc[cat]) acc[cat] = []
+        acc[cat].push(recipe)
       })
     }
     return acc
@@ -74,7 +92,29 @@ export default function RecipesTab() {
       const pantryItem = pantryItems.find(
         p => p.name.toLowerCase() === ing.name.toLowerCase()
       )
-      return pantryItem && pantryItem.quantity >= ing.quantity
+      if (!pantryItem) return false
+      
+      // Convert to same unit for comparison
+      if (pantryItem.unit === ing.unit) {
+        return pantryItem.quantity >= ing.quantity
+      }
+      
+      // Simple conversions
+      if (pantryItem.unit === 'kg' && ing.unit === 'g') {
+        return pantryItem.quantity * 1000 >= ing.quantity
+      }
+      if (pantryItem.unit === 'g' && ing.unit === 'kg') {
+        return pantryItem.quantity >= ing.quantity * 1000
+      }
+      if (pantryItem.unit === 'l' && ing.unit === 'ml') {
+        return pantryItem.quantity * 1000 >= ing.quantity
+      }
+      if (pantryItem.unit === 'ml' && ing.unit === 'l') {
+        return pantryItem.quantity >= ing.quantity * 1000
+      }
+      
+      // For different units, just check if we have the item
+      return pantryItem.quantity > 0
     })
   }
 
@@ -83,7 +123,26 @@ export default function RecipesTab() {
       const pantryItem = pantryItems.find(
         p => p.name.toLowerCase() === ing.name.toLowerCase()
       )
-      return !pantryItem || pantryItem.quantity < ing.quantity
+      if (!pantryItem) return true
+      
+      if (pantryItem.unit === ing.unit) {
+        return pantryItem.quantity < ing.quantity
+      }
+      
+      if (pantryItem.unit === 'kg' && ing.unit === 'g') {
+        return pantryItem.quantity * 1000 < ing.quantity
+      }
+      if (pantryItem.unit === 'g' && ing.unit === 'kg') {
+        return pantryItem.quantity < ing.quantity * 1000
+      }
+      if (pantryItem.unit === 'l' && ing.unit === 'ml') {
+        return pantryItem.quantity * 1000 < ing.quantity
+      }
+      if (pantryItem.unit === 'ml' && ing.unit === 'l') {
+        return pantryItem.quantity < ing.quantity * 1000
+      }
+      
+      return pantryItem.quantity === 0
     })
   }
 
@@ -105,7 +164,6 @@ export default function RecipesTab() {
 
       const data = await response.json()
       
-      // Save the imported recipe to database
       await addRecipe({
         user_id: 'temp-user-id',
         name: data.name,
@@ -143,6 +201,25 @@ export default function RecipesTab() {
     }
   }
 
+  const parseIngredients = (text: string) => {
+    return text.split('\n').filter(Boolean).map(line => {
+      // Parse "200g farine" or "2 oeufs" or "1l lait"
+      const match = line.match(/^([\d.,]+)\s*([a-zA-Zéèê]+)?\s+(.+)$/)
+      if (match) {
+        return {
+          quantity: parseFloat(match[1].replace(',', '.')),
+          unit: match[2] || 'pièce(s)',
+          name: match[3].trim()
+        }
+      }
+      return {
+        quantity: 1,
+        unit: 'pièce(s)',
+        name: line.trim()
+      }
+    })
+  }
+
   const handleCreateRecipe = async () => {
     if (!formName.trim()) {
       toast.error('Le nom est requis')
@@ -150,6 +227,8 @@ export default function RecipesTab() {
     }
 
     try {
+      const allTags = [...formCategories, ...formTags.split(',').map(t => t.trim()).filter(Boolean)]
+      
       await addRecipe({
         user_id: 'temp-user-id',
         name: formName.trim(),
@@ -158,20 +237,15 @@ export default function RecipesTab() {
         description: formDescription.trim() || null,
         steps: formInstructions.trim().split('\n').filter(Boolean),
         note: null,
-        tags: formTags.split(',').map(t => t.trim()).filter(Boolean),
-        ingredients: [],
+        tags: allTags,
+        ingredients: parseIngredients(formIngredients),
         image_url: null,
         source_url: null,
       })
 
       toast.success('Recette créée !')
       setShowCreateModal(false)
-      setFormName('')
-      setFormDuration('')
-      setFormServings('4')
-      setFormDescription('')
-      setFormInstructions('')
-      setFormTags('')
+      resetForm()
     } catch (error) {
       toast.error('Erreur lors de la création')
     }
@@ -181,20 +255,35 @@ export default function RecipesTab() {
     if (!selectedRecipe || !formName.trim()) return
 
     try {
+      const allTags = [...formCategories, ...formTags.split(',').map(t => t.trim()).filter(Boolean)]
+      
       await updateRecipe(selectedRecipe, {
         name: formName.trim(),
         duration: parseInt(formDuration) || 30,
         servings: parseInt(formServings) || 4,
         description: formDescription.trim() || null,
         steps: formInstructions.trim().split('\n').filter(Boolean),
-        tags: formTags.split(',').map(t => t.trim()).filter(Boolean),
+        tags: allTags,
+        ingredients: parseIngredients(formIngredients),
       })
 
       toast.success('Recette modifiée !')
       setShowEditModal(false)
+      setSelectedRecipe(null)
     } catch (error) {
       toast.error('Erreur lors de la modification')
     }
+  }
+
+  const resetForm = () => {
+    setFormName('')
+    setFormDuration('')
+    setFormServings('4')
+    setFormDescription('')
+    setFormInstructions('')
+    setFormTags('')
+    setFormCategories([])
+    setFormIngredients('')
   }
 
   const openEditModal = (recipe: typeof recipes[0]) => {
@@ -203,30 +292,42 @@ export default function RecipesTab() {
     setFormServings(String(recipe.servings))
     setFormDescription(recipe.description || '')
     setFormInstructions(recipe.steps.join('\n'))
-    setFormTags(recipe.tags.join(', '))
+    
+    const categories = recipe.tags.filter(t => RECIPE_CATEGORIES.includes(t))
+    const otherTags = recipe.tags.filter(t => !RECIPE_CATEGORIES.includes(t))
+    
+    setFormCategories(categories)
+    setFormTags(otherTags.join(', '))
+    setFormIngredients(recipe.ingredients.map(i => `${i.quantity}${i.unit} ${i.name}`).join('\n'))
+    
+    setSelectedRecipe(recipe.id)
     setShowEditModal(true)
   }
 
   const startCookingMode = () => {
     setCurrentStep(0)
     setShowCookingMode(true)
-    setSelectedRecipe(null)
   }
 
   const getIngredientFromStep = (stepText: string) => {
     if (!selected) return []
     
-    // Detect ingredients by checking if the ingredient name appears in the step text
     return selected.ingredients.filter(ing => {
       const stepLower = stepText.toLowerCase()
       const ingredientLower = ing.name.toLowerCase()
       
-      // Check if the ingredient name is in the step
-      // Also check for common variations (plural, etc)
       return stepLower.includes(ingredientLower) || 
              stepLower.includes(ingredientLower + 's') ||
-             stepLower.includes(ingredientLower.slice(0, -1)) // singular if ingredient is plural
+             stepLower.includes(ingredientLower.slice(0, -1))
     })
+  }
+
+  const toggleCategory = (cat: string) => {
+    if (formCategories.includes(cat)) {
+      setFormCategories(formCategories.filter(c => c !== cat))
+    } else {
+      setFormCategories([...formCategories, cat])
+    }
   }
 
   return (
@@ -235,10 +336,12 @@ export default function RecipesTab() {
       {showCookingMode && selected ? (
         <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 dark:from-gray-900 dark:to-gray-800 p-4">
           <div className="max-w-2xl mx-auto">
-            {/* Header */}
             <div className="flex items-center justify-between mb-6">
               <button
-                onClick={() => setShowCookingMode(false)}
+                onClick={() => {
+                  setShowCookingMode(false)
+                  setSelectedRecipe(null)
+                }}
                 className="p-2 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
                 <ArrowLeft className="w-6 h-6" />
@@ -251,7 +354,6 @@ export default function RecipesTab() {
               </div>
             </div>
 
-            {/* Progress */}
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-8">
               <div 
                 className="bg-gradient-to-r from-orange-500 to-amber-600 h-2 rounded-full transition-all duration-300"
@@ -259,7 +361,6 @@ export default function RecipesTab() {
               />
             </div>
 
-            {/* Current Step */}
             <motion.div
               key={currentStep}
               initial={{ opacity: 0, x: 20 }}
@@ -280,7 +381,6 @@ export default function RecipesTab() {
                 {selected.steps[currentStep]}
               </p>
 
-              {/* Ingredients in this step */}
               {getIngredientFromStep(selected.steps[currentStep]).length > 0 && (
                 <div className="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 mb-4">
                   <h4 className="text-sm font-semibold text-orange-900 dark:text-orange-200 mb-2 flex items-center gap-2">
@@ -298,7 +398,6 @@ export default function RecipesTab() {
               )}
             </motion.div>
 
-            {/* Navigation */}
             <div className="flex gap-3">
               <button
                 onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
@@ -321,6 +420,7 @@ export default function RecipesTab() {
                 <button
                   onClick={() => {
                     setShowCookingMode(false)
+                    setSelectedRecipe(null)
                     toast.success('Recette terminée ! Bon appétit ! 🎉')
                   }}
                   className="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
@@ -334,8 +434,7 @@ export default function RecipesTab() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6">
-          {/* Toolbar */}
-          <div className="glass p-4 rounded-2xl space-y-4">
+          <div className="glass-strong p-4 rounded-2xl space-y-4 border-2 border-gray-200 dark:border-gray-700">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -347,30 +446,29 @@ export default function RecipesTab() {
               />
             </div>
 
-            {/* Tag filter */}
-            {allTags.length > 0 && (
+            {usedCategories.length > 0 && (
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-3 px-3 sm:mx-0 sm:px-0">
                 <button
-                  onClick={() => setSelectedTag('all')}
+                  onClick={() => setSelectedCategory('all')}
                   className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
-                    selectedTag === 'all'
+                    selectedCategory === 'all'
                       ? 'bg-orange-500 text-white shadow-lg'
                       : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
                   }`}
                 >
                   Toutes
                 </button>
-                {allTags.map(tag => (
+                {usedCategories.map(cat => (
                   <button
-                    key={tag}
-                    onClick={() => setSelectedTag(tag)}
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
                     className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all ${
-                      selectedTag === tag
+                      selectedCategory === cat
                         ? 'bg-orange-500 text-white shadow-lg'
                         : 'bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800'
                     }`}
                   >
-                    {tag}
+                    {cat}
                   </button>
                 ))}
               </div>
@@ -399,9 +497,8 @@ export default function RecipesTab() {
             </div>
           </div>
 
-          {/* Recipe Grid */}
-          {Object.keys(recipesByTag).length === 0 ? (
-            <div className="text-center py-16 glass rounded-2xl">
+          {Object.keys(recipesByCategory).length === 0 ? (
+            <div className="text-center py-16 glass-strong rounded-2xl border-2 border-gray-200 dark:border-gray-700">
               <ChefHat className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-700" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Aucune recette
@@ -412,22 +509,22 @@ export default function RecipesTab() {
             </div>
           ) : (
             <div className="space-y-4">
-              {Object.entries(recipesByTag).map(([tag, tagRecipes]) => {
-                const isOpen = openTags[tag] ?? true
+              {Object.entries(recipesByCategory).map(([category, catRecipes]) => {
+                const isOpen = openCategories[category] ?? true
 
                 return (
-                  <div key={tag} className="glass-strong rounded-2xl overflow-hidden">
+                  <div key={category} className="glass-strong rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700">
                     <button
-                      onClick={() => setOpenTags({
-                        ...openTags,
-                        [tag]: !isOpen
+                      onClick={() => setOpenCategories({
+                        ...openCategories,
+                        [category]: !isOpen
                       })}
                       className="w-full p-4 flex items-center justify-between hover:bg-white/50 dark:hover:bg-gray-700/50 transition-colors"
                     >
                       <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                        {tag}
+                        {category}
                         <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-                          ({tagRecipes.length})
+                          ({catRecipes.length})
                         </span>
                       </h3>
                       <ChevronDown 
@@ -440,7 +537,7 @@ export default function RecipesTab() {
                     {isOpen && (
                       <div className="p-3 pt-0">
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {tagRecipes.map(recipe => {
+                          {catRecipes.map(recipe => {
                             const canMake = canMakeRecipe(recipe)
                             const missing = getMissingIngredients(recipe)
 
@@ -612,7 +709,23 @@ export default function RecipesTab() {
                         const pantryItem = pantryItems.find(
                           p => p.name.toLowerCase() === ing.name.toLowerCase()
                         )
-                        const hasEnough = pantryItem && pantryItem.quantity >= ing.quantity
+                        
+                        let hasEnough = false
+                        if (pantryItem) {
+                          if (pantryItem.unit === ing.unit) {
+                            hasEnough = pantryItem.quantity >= ing.quantity
+                          } else if (pantryItem.unit === 'kg' && ing.unit === 'g') {
+                            hasEnough = pantryItem.quantity * 1000 >= ing.quantity
+                          } else if (pantryItem.unit === 'g' && ing.unit === 'kg') {
+                            hasEnough = pantryItem.quantity >= ing.quantity * 1000
+                          } else if (pantryItem.unit === 'l' && ing.unit === 'ml') {
+                            hasEnough = pantryItem.quantity * 1000 >= ing.quantity
+                          } else if (pantryItem.unit === 'ml' && ing.unit === 'l') {
+                            hasEnough = pantryItem.quantity >= ing.quantity * 1000
+                          } else {
+                            hasEnough = pantryItem.quantity > 0
+                          }
+                        }
 
                         return (
                           <li
@@ -699,7 +812,7 @@ export default function RecipesTab() {
               </h2>
 
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                💡 Fonctionne avec : Marmiton, 750g, Cuisine AZ, AllRecipes, et la plupart des sites utilisant le format JSON-LD
+                💡 Fonctionne avec : Marmiton, 750g, Cuisine AZ, AllRecipes
               </p>
               
               <input
@@ -771,6 +884,28 @@ export default function RecipesTab() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Catégories
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {RECIPE_CATEGORIES.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => toggleCategory(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          formCategories.includes(cat)
+                            ? 'bg-orange-500 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -814,6 +949,19 @@ export default function RecipesTab() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Ingrédients (une par ligne : "200g farine")
+                  </label>
+                  <textarea
+                    value={formIngredients}
+                    onChange={(e) => setFormIngredients(e.target.value)}
+                    placeholder="200g farine&#10;2 oeufs&#10;1l lait"
+                    rows={4}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Instructions (une par ligne)
                   </label>
                   <textarea
@@ -827,13 +975,13 @@ export default function RecipesTab() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tags (séparés par des virgules)
+                    Tags supplémentaires (séparés par des virgules)
                   </label>
                   <input
                     type="text"
                     value={formTags}
                     onChange={(e) => setFormTags(e.target.value)}
-                    placeholder="Italien, Pâtes, Rapide"
+                    placeholder="Italien, Rapide, Facile"
                     className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
                   />
                 </div>
@@ -898,6 +1046,28 @@ export default function RecipesTab() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Catégories
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {RECIPE_CATEGORIES.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => toggleCategory(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          formCategories.includes(cat)
+                            ? 'bg-orange-500 text-white'
+                            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -938,6 +1108,18 @@ export default function RecipesTab() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Ingrédients (une par ligne : "200g farine")
+                  </label>
+                  <textarea
+                    value={formIngredients}
+                    onChange={(e) => setFormIngredients(e.target.value)}
+                    rows={4}
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Instructions (une par ligne)
                   </label>
                   <textarea
@@ -950,7 +1132,7 @@ export default function RecipesTab() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tags (séparés par des virgules)
+                    Tags supplémentaires (séparés par des virgules)
                   </label>
                   <input
                     type="text"
