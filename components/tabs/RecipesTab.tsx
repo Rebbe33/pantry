@@ -20,6 +20,7 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  Camera,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -66,6 +67,7 @@ export default function RecipesTab() {
   const [currentStep, setCurrentStep] = useState(0)
   const [importUrl, setImportUrl] = useState('')
   const [isImporting, setIsImporting] = useState(false)
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false)
 
   // Create/Edit form state
   const [formName, setFormName] = useState('')
@@ -225,6 +227,39 @@ export default function RecipesTab() {
     
     const updated = importPreviewData.ingredients.filter((_: any, i: number) => i !== index)
     setImportPreviewData({ ...importPreviewData, ingredients: updated })
+  }
+
+  const handlePhotoImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsProcessingPhoto(true)
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+
+      const response = await fetch('/api/ocr-recipe', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) throw new Error('Échec du traitement de l\'image')
+
+      const data = await response.json()
+      
+      // Show preview
+      setImportPreviewData(data)
+      setShowImportPreview(true)
+      
+      toast.success('Photo traitée ! Vérifiez les ingrédients.')
+    } catch (error) {
+      console.error('Photo import error:', error)
+      toast.error('Impossible de traiter la photo')
+    } finally {
+      setIsProcessingPhoto(false)
+      // Reset file input
+      event.target.value = ''
+    }
   }
 
   const handleDelete = async (id: string, name: string) => {
@@ -569,27 +604,52 @@ export default function RecipesTab() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowImportModal(true)}
-                className="px-3 sm:px-4 py-2.5 bg-purple-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium text-sm"
+                className="px-2 sm:px-3 py-2.5 bg-purple-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-1 sm:gap-2 font-medium text-xs sm:text-sm"
               >
                 <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Importer</span>
+                <span className="hidden sm:inline">Importer</span>
+                <span className="sm:hidden">URL</span>
               </motion.button>
+
+              <motion.label
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="px-2 sm:px-3 py-2.5 bg-blue-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-1 sm:gap-2 font-medium text-xs sm:text-sm cursor-pointer"
+              >
+                <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">Photo</span>
+                <span className="sm:hidden">📷</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handlePhotoImport}
+                  disabled={isProcessingPhoto}
+                  className="hidden"
+                />
+              </motion.label>
 
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setShowCreateModal(true)}
-                className="px-3 sm:px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium text-sm"
+                className="px-2 sm:px-3 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-1 sm:gap-2 font-medium text-xs sm:text-sm"
               >
                 <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Créer</span>
               </motion.button>
             </div>
+            
+            {isProcessingPhoto && (
+              <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+                🔍 Analyse de la photo en cours...
+              </div>
+            )}
           </div>
 
           {Object.keys(recipesByCategory).length === 0 ? (
