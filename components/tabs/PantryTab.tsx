@@ -33,6 +33,7 @@ export default function PantryTab() {
   const [editingItemFull, setEditingItemFull] = useState<string | null>(null)
   const [editFormLocation, setEditFormLocation] = useState('')
   const [editFormCategory, setEditFormCategory] = useState('')
+  const [editFormName, setEditFormName] = useState('')
   
   // Form state
   const [formName, setFormName] = useState('')
@@ -265,11 +266,10 @@ export default function PantryTab() {
       ) : (
         <div className="space-y-4 sm:space-y-6">
           {Object.entries(itemsByCategory).map(([category, items]) => {
-            const isOpen = openCategories[category] ?? true // Ouvert par défaut
+            const isOpen = openCategories[category] ?? true
             
             return (
               <div key={category} className="glass-strong rounded-2xl overflow-hidden mb-4">
-                {/* Header cliquable */}
                 <button
                   onClick={() => setOpenCategories({
                     ...openCategories,
@@ -290,112 +290,109 @@ export default function PantryTab() {
                   />
                 </button>
               
-                {/* Contenu déroulant */}
                 {isOpen && (
                   <div className="p-3 pt-0">
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
                       {items.map((item, index) => {
-                  const expiryStatus = getExpiryStatus(item.expiry_date)
-                  const isEditing = editingItem === item.id
-                  
-                  return (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.03 }}
-                      className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-600 hover:shadow-xl transition-all"
-                    >
-                      <div className="p-3 sm:p-4 flex flex-col h-full">
-                        <div className="flex-1">
-                        {/* Name */}
-                        <h4 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm sm:text-base line-clamp-2">
-                          {item.name}
-                        </h4>
-
-                        {/* Quantity - editable */}
-                        {isEditing ? (
-                          <div className="mb-2 space-y-1.5">
-                            <div className="grid grid-cols-2 gap-1.5">
-                              <input
-                                type="number"
-                                value={editQuantity}
-                                onChange={(e) => setEditQuantity(e.target.value)}
-                                className="w-full px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
-                                autoFocus
-                              />
-                              <select
-                                value={editUnit}
-                                onChange={(e) => setEditUnit(e.target.value)}
-                                className="w-full px-1.5 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
-                              >
-                                <option value="g">g</option>
-                                <option value="kg">kg</option>
-                                <option value="ml">ml</option>
-                                <option value="l">L</option>
-                                <option value="pièce(s)">pc</option>
-                              </select>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1.5">
-                              <button
-                                onClick={() => handleUpdateQuantity(item.id)}
-                                className="w-full py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs font-medium"
-                              >
-                                ✓
-                              </button>
-                              <button
-                                onClick={() => setEditingItem(null)}
-                                className="w-full py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-xs font-medium"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setEditingItem(item.id)
-                              setEditQuantity(String(item.quantity))
-                              setEditUnit(item.unit)
-                            }}
-                            className="text-base sm:text-lg font-bold text-orange-600 dark:text-orange-400 mb-2 hover:text-orange-700 dark:hover:text-orange-300 transition-colors block w-full text-left"
+                        const expiryStatus = getExpiryStatus(item.expiry_date)
+                        const isEditing = editingItem === item.id
+                        
+                        return (
+                          <motion.div
+                            key={item.id}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.03 }}
+                            className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl overflow-hidden border-2 border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-600 hover:shadow-xl transition-all"
                           >
-                            {item.quantity} {item.unit}
-                          </button>
-                        )}
+                            <div className="p-3 sm:p-4 flex flex-col h-full min-h-[180px]">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm sm:text-base line-clamp-2">
+                                  {item.name}
+                                </h4>
 
-                        {/* Expiry */}
-                        {expiryStatus && (
-                          <div className={`text-xs px-2 py-1 rounded-lg mb-2 ${expiryStatus.bg}`}>
-                            <span className={`font-medium ${expiryStatus.color}`}>
-                              {expiryStatus.label}
-                            </span>
-                          </div>
-                        )}
-                        </div>
-                        {/* Actions */}
-                        <div className="flex gap-1 sm:gap-2 mt-auto">
-                          <button
-                            onClick={() => {
-                                setEditingItemFull(item.id)
-                                setEditFormLocation(item.location)
-                                setEditFormCategory(item.category)
+                                {isEditing ? (
+                                  <div className="mb-2 space-y-1.5">
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                      <input
+                                        type="number"
+                                        value={editQuantity}
+                                        onChange={(e) => setEditQuantity(e.target.value)}
+                                        className="w-full px-2 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
+                                        autoFocus
+                                      />
+                                      <select
+                                        value={editUnit}
+                                        onChange={(e) => setEditUnit(e.target.value)}
+                                        className="w-full px-1.5 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
+                                      >
+                                        <option value="g">g</option>
+                                        <option value="kg">kg</option>
+                                        <option value="ml">ml</option>
+                                        <option value="l">L</option>
+                                        <option value="pièce(s)">pc</option>
+                                      </select>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                      <button
+                                        onClick={() => handleUpdateQuantity(item.id)}
+                                        className="w-full py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 text-xs font-medium"
+                                      >
+                                        ✓
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingItem(null)}
+                                        className="w-full py-1 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-xs font-medium"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setEditingItem(item.id)
+                                      setEditQuantity(String(item.quantity))
+                                      setEditUnit(item.unit)
+                                    }}
+                                    className="text-base sm:text-lg font-bold text-orange-600 dark:text-orange-400 mb-2 hover:text-orange-700 dark:hover:text-orange-300 transition-colors block w-full text-left"
+                                  >
+                                    {item.quantity} {item.unit}
+                                  </button>
+                                )}
+
+                                {expiryStatus && (
+                                  <div className={`text-xs px-2 py-1 rounded-lg mb-2 ${expiryStatus.bg}`}>
+                                    <span className={`font-medium ${expiryStatus.color}`}>
+                                      {expiryStatus.label}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex gap-1 sm:gap-2 mt-auto">
+                                <button
+                                  onClick={() => {
+                                    setEditingItemFull(item.id)
+                                    setEditFormLocation(item.location)
+                                    setEditFormCategory(item.category)
+                                    setEditFormName(item.name)
                                   }}
-                              className="flex-1 p-1.5 sm:p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                          >
-                          <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item.id, item.name)}
-                            className="flex-1 p-1.5 sm:p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto" />
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )
-                })}
+                                  className="flex-1 p-1.5 sm:p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(item.id, item.name)}
+                                  className="flex-1 p-1.5 sm:p-2 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mx-auto" />
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -405,7 +402,7 @@ export default function PantryTab() {
         </div>
       )}
 
-      {/* Add Modal */}
+      {/* Modals */}
       <AnimatePresence>
         {showAddModal && (
           <motion.div
@@ -540,7 +537,7 @@ export default function PantryTab() {
             </motion.div>
           </motion.div>
         )}
-        {/* Edit Modal */}
+
         {editingItemFull && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -569,6 +566,19 @@ export default function PantryTab() {
               </div>
 
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Nom du produit
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormName}
+                    onChange={(e) => setEditFormName(e.target.value)}
+                    placeholder="Ex: Tomates"
+                    className="w-full px-4 py-2.5 bg-white/50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Emplacement
@@ -609,8 +619,13 @@ export default function PantryTab() {
                 </button>
                 <button
                   onClick={async () => {
+                    if (!editFormName.trim()) {
+                      toast.error('Le nom est requis')
+                      return
+                    }
                     try {
                       await updatePantryItem(editingItemFull, {
+                        name: editFormName.trim(),
                         location: editFormLocation,
                         category: editFormCategory
                       })
@@ -629,6 +644,6 @@ export default function PantryTab() {
           </motion.div>
         )}
       </AnimatePresence>
-      </div>
+    </div>
   )
 }
