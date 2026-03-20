@@ -36,6 +36,17 @@ export function useDataPersistence() {
       )
       .subscribe()
 
+    const recipeIngredientsChannel = supabase
+      .channel('recipe-ingredients-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'pantry_recipe_ingredients' },
+        (payload) => {
+          console.log('Recipe ingredients changed:', payload)
+          loadRecipes()
+        }
+      )
+      .subscribe()
+
     const menuChannel = supabase
       .channel('menu-changes')
       .on('postgres_changes',
@@ -61,6 +72,7 @@ export function useDataPersistence() {
     return () => {
       supabase.removeChannel(pantryChannel)
       supabase.removeChannel(recipesChannel)
+      supabase.removeChannel(recipeIngredientsChannel)
       supabase.removeChannel(menuChannel)
       supabase.removeChannel(customShoppingChannel)
     }
@@ -99,7 +111,8 @@ export function useDataPersistence() {
   }
 
   const loadRecipes = async () => {
-    const { data, error } = await supabase
+    // Fetch recipes
+    const { data: recipes, error } = await supabase
       .from('pantry_recipes')
       .select('*')
       .order('created_at', { ascending: false })
@@ -108,6 +121,34 @@ export function useDataPersistence() {
       console.error('Error loading recipes:', error)
       return
     }
+
+    if (!recipes) {
+      setRecipes([])
+      return
+    }
+
+    // Fetch recipe ingredients with pantry item details
+    const { data: recipeIngredients, error: ingredientsError } = await supabase
+      .from('pantry_recipe_ingredients')
+      .select(`
+        *,
+        pantry_item:pantry_items(*)
+      `)
+
+    if (ingredientsError) {
+      console.error('Error loading recipe ingredients:', ingredientsError)
+      setRecipes(recipes)
+      return
+    }
+
+    // Attach ingredients to recipes
+    const recipesWithIngredients = recipes.map(recipe => ({
+      ...recipe,
+      recipe_ingredients: recipeIngredients?.filter(ing => ing.recipe_id === recipe.id) || []
+    }))
+
+    setRecipes(recipesWithIngredients)
+  }
 
     setRecipes(data || [])
   }
