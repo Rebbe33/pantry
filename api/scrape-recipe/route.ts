@@ -97,49 +97,159 @@ function parseIngredient(text: string) {
     .replace(/\s+/g, ' ')
     .trim()
   
-  // Try to extract quantity, unit, and name
-  const match = cleaned.match(/^([\d\s\/.,]+)?\s*(g|kg|ml|l|cl|dl|tsp|tbsp|cup|cuillère|cuillères|c\.\s*à\s*soupe|c\.\s*à\s*café|pincée|pincées)?\.?\s*(.+)$/i)
+  // Special cases - return early for common patterns
+  // "gousse(s) d'ail" → "ail"
+  if (/^(\d+[\s\/,.]*)?\s*gousse(s)?\s+(d'|de\s+)?ail/i.test(cleaned)) {
+    const qtyMatch = cleaned.match(/^([\d\/.,]+)/)
+    return {
+      name: 'Ail',
+      quantity: qtyMatch ? parseFloat(qtyMatch[1].replace(',', '.')) : 1,
+      unit: 'gousse(s)',
+    }
+  }
+  
+  // "filet de jus de citron" → "jus de citron"
+  if (/^(\d+[\s\/,.]*)?\s*filet(s)?\s+(de|du|d')/i.test(cleaned)) {
+    const restMatch = cleaned.match(/filet(s)?\s+(?:de|du|d')\s+(.+)$/i)
+    if (restMatch) {
+      return {
+        name: capitalizeFirst(restMatch[2].trim()),
+        quantity: 1,
+        unit: 'filet(s)',
+      }
+    }
+  }
+  
+  // "noix de beurre" → "beurre" (noix = petite quantité)
+  if (/^(\d+[\s\/,.]*)?\s*noix\s+de\s+/i.test(cleaned)) {
+    const restMatch = cleaned.match(/noix\s+de\s+(.+)$/i)
+    if (restMatch) {
+      return {
+        name: capitalizeFirst(restMatch[1].trim()),
+        quantity: 1,
+        unit: 'noix',
+      }
+    }
+  }
+  
+  // Main regex - try to extract quantity, unit, and name
+  const match = cleaned.match(/^([\d\s\/.,]+)?\s*(g|kg|mg|ml|l|cl|dl|tasse|verre|c\.?\s*à\s*s\.?|c\.?\s*à\s*c\.?|càs|càc|cs|cc|cuillère(s)?(\s+à\s+(soupe|café))?|c\.\s*à\s*soupe|c\.\s*à\s*café|tsp|tbsp|cup|pincée(s)?|brin(s)?|gousse(s)?|tranche(s)?|morceau(x)?|feuille(s)?|sachet(s)?|boîte(s)?|paquet(s)?|pot(s)?)?\.?\s*(.+)$/i)
   
   if (match) {
-    const [, qty, unit, name] = match
+    const [, qty, unit, , , , , , , name] = match
     
     // Clean the ingredient name
-    let cleanedName = name.trim()
+    let cleanedName = name ? name.trim() : cleaned
     
-    // Remove common French articles and prepositions
+    // Remove articles and prepositions - but be careful with words starting with these letters!
+    // Use word boundaries to avoid "gousse d'ail" → "ousse ail"
     cleanedName = cleanedName.replace(/^de\s+/i, '')
-    cleanedName = cleanedName.replace(/^d'/i, '')
+    cleanedName = cleanedName.replace(/^d'\s*/i, '')
     cleanedName = cleanedName.replace(/^du\s+/i, '')
     cleanedName = cleanedName.replace(/^des\s+/i, '')
     cleanedName = cleanedName.replace(/^de\s+la\s+/i, '')
-    cleanedName = cleanedName.replace(/^de\s+l'/i, '')
+    cleanedName = cleanedName.replace(/^de\s+l'\s*/i, '')
     cleanedName = cleanedName.replace(/^la\s+/i, '')
     cleanedName = cleanedName.replace(/^le\s+/i, '')
-    cleanedName = cleanedName.replace(/^l'/i, '')
+    cleanedName = cleanedName.replace(/^l'\s*/i, '')
     cleanedName = cleanedName.replace(/^un\s+/i, '')
     cleanedName = cleanedName.replace(/^une\s+/i, '')
     
-    // Capitalize first letter
-    cleanedName = cleanedName.trim()
-    if (cleanedName.length > 0) {
-      cleanedName = cleanedName.charAt(0).toUpperCase() + cleanedName.slice(1)
-    }
+    // Remove quantity words
+    cleanedName = cleanedName.replace(/^quelques\s+/i, '')
+    cleanedName = cleanedName.replace(/^un\s+peu\s+(de\s+)?/i, '')
     
     // Normalize unit
-    let normalizedUnit = unit?.toLowerCase().replace(/\s+/g, ' ').trim() || 'pièce(s)'
-    if (normalizedUnit === 'cuillère' || normalizedUnit === 'cuillères' || normalizedUnit.includes('c. à soupe')) {
-      normalizedUnit = 'c. à soupe'
+    let normalizedUnit = 'pièce(s)'
+    if (unit) {
+      const unitLower = unit.toLowerCase().replace(/\s+/g, ' ').trim()
+      
+      // Cuillères à soupe
+      if (/^(cuillère(s)?(\s+à\s+soupe)?|c\.?\s*à\s*s\.?|càs|cs|c\.\s*à\s*soupe|tbsp)$/i.test(unitLower)) {
+        normalizedUnit = 'c. à soupe'
+      }
+      // Cuillères à café
+      else if (/^(cuillère(s)?(\s+à\s+café)?|c\.?\s*à\s*c\.?|càc|cc|c\.\s*à\s*café|tsp)$/i.test(unitLower)) {
+        normalizedUnit = 'c. à café'
+      }
+      // Pincées
+      else if (/^pincée(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'pincée(s)'
+      }
+      // Brins
+      else if (/^brin(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'brin(s)'
+      }
+      // Gousses
+      else if (/^gousse(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'gousse(s)'
+      }
+      // Tranches
+      else if (/^tranche(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'tranche(s)'
+      }
+      // Morceaux
+      else if (/^morceau(x)?$/i.test(unitLower)) {
+        normalizedUnit = 'morceau(x)'
+      }
+      // Feuilles
+      else if (/^feuille(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'feuille(s)'
+      }
+      // Sachets
+      else if (/^sachet(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'sachet(s)'
+      }
+      // Boîtes
+      else if (/^boîte(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'boîte(s)'
+      }
+      // Paquets
+      else if (/^paquet(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'paquet(s)'
+      }
+      // Pots
+      else if (/^pot(s)?$/i.test(unitLower)) {
+        normalizedUnit = 'pot(s)'
+      }
+      // Tasse/verre
+      else if (/^(tasse|verre|cup)$/i.test(unitLower)) {
+        normalizedUnit = 'tasse'
+      }
+      // Standard units
+      else {
+        normalizedUnit = unitLower
+      }
     }
-    if (normalizedUnit.includes('c. à café')) {
-      normalizedUnit = 'c. à café'
-    }
-    if (normalizedUnit === 'pincée' || normalizedUnit === 'pincées') {
-      normalizedUnit = 'pincée(s)'
+    
+    // Parse quantity (handle fractions)
+    let parsedQty = 1
+    if (qty) {
+      const qtyStr = qty.trim().replace(',', '.').replace(/\s+/g, '')
+      
+      // Handle fractions like "1/2" or "1 1/2"
+      if (qtyStr.includes('/')) {
+        const parts = qtyStr.split(/[\s+]/)
+        let total = 0
+        
+        for (const part of parts) {
+          if (part.includes('/')) {
+            const [num, denom] = part.split('/').map(parseFloat)
+            if (denom) total += num / denom
+          } else {
+            total += parseFloat(part) || 0
+          }
+        }
+        
+        parsedQty = total || 1
+      } else {
+        parsedQty = parseFloat(qtyStr) || 1
+      }
     }
     
     return {
-      name: cleanedName,
-      quantity: parseFloat(qty?.trim().replace(',', '.').replace(/\s+/g, '') || '1'),
+      name: capitalizeFirst(cleanedName),
+      quantity: parsedQty,
       unit: normalizedUnit,
     }
   }
@@ -147,27 +257,31 @@ function parseIngredient(text: string) {
   // If no match, clean the whole text as name
   let cleanedName = cleaned
   cleanedName = cleanedName.replace(/^de\s+/i, '')
-  cleanedName = cleanedName.replace(/^d'/i, '')
+  cleanedName = cleanedName.replace(/^d'\s*/i, '')
   cleanedName = cleanedName.replace(/^du\s+/i, '')
   cleanedName = cleanedName.replace(/^des\s+/i, '')
   cleanedName = cleanedName.replace(/^de\s+la\s+/i, '')
-  cleanedName = cleanedName.replace(/^de\s+l'/i, '')
+  cleanedName = cleanedName.replace(/^de\s+l'\s*/i, '')
   cleanedName = cleanedName.replace(/^la\s+/i, '')
   cleanedName = cleanedName.replace(/^le\s+/i, '')
-  cleanedName = cleanedName.replace(/^l'/i, '')
+  cleanedName = cleanedName.replace(/^l'\s*/i, '')
   cleanedName = cleanedName.replace(/^un\s+/i, '')
   cleanedName = cleanedName.replace(/^une\s+/i, '')
-  
-  cleanedName = cleanedName.trim()
-  if (cleanedName.length > 0) {
-    cleanedName = cleanedName.charAt(0).toUpperCase() + cleanedName.slice(1)
-  }
+  cleanedName = cleanedName.replace(/^quelques\s+/i, '')
+  cleanedName = cleanedName.replace(/^un\s+peu\s+(de\s+)?/i, '')
   
   return {
-    name: cleanedName,
+    name: capitalizeFirst(cleanedName),
     quantity: 1,
     unit: 'pièce(s)',
   }
+}
+
+// Helper to capitalize first letter
+function capitalizeFirst(str: string): string {
+  const trimmed = str.trim()
+  if (trimmed.length === 0) return ''
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
 }
 
 // Helper to parse ISO 8601 duration (PT1H30M)
