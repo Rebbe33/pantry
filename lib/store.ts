@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { cleanIngredientName } from '@/lib/recipe-helpers'
 
 export interface PantryItem {
   id: string
@@ -241,11 +242,14 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   linkOrCreateIngredient: async (recipeId, ingredientName, quantity, unit) => {
+    // Clean the ingredient name before searching/creating
+    const cleanedName = cleanIngredientName(ingredientName)
+    
     // Try to find existing pantry item
     const { data: existing } = await supabase
       .from('pantry_items')
       .select('id')
-      .ilike('name', ingredientName)
+      .ilike('name', cleanedName)
       .limit(1)
       .single()
     
@@ -259,7 +263,7 @@ export const useStore = create<AppStore>((set, get) => ({
         .from('pantry_items')
         .insert([{
           user_id: 'temp-user-id',
-          name: ingredientName,
+          name: cleanedName,
           quantity: 0,
           unit: unit,
           location: 'Placard',
