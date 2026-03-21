@@ -238,7 +238,7 @@ export default function RecipesTab() {
       const formData = new FormData()
       formData.append('image', file)
 
-      const response = await fetch('/api/ocr-recipe', {
+      const response = await fetch('/api/photo-import', {
         method: 'POST',
         body: formData,
       })
