@@ -627,7 +627,6 @@ export default function RecipesTab() {
                 <input
                   type="file"
                   accept="image/*"
-                  capture="environment"
                   onChange={handlePhotoImport}
                   disabled={isProcessingPhoto}
                   className="hidden"
