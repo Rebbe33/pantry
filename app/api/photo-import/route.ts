@@ -97,16 +97,21 @@ function parseRecipeFromOCR(text: string) {
   
   let section: 'header' | 'ingredients' | 'steps' = 'header'
   let stepBuffer: string[] = []
+  let titleCandidates: string[] = []
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
     const lowerLine = line.toLowerCase()
     
-    // Detect recipe name (usually first significant line or after "recette")
-    if (section === 'header' && i < 5 && line.length > 5 && line.length < 100) {
-      if (!lowerLine.includes('recette') || lowerLine.includes('recette de') || lowerLine.includes('recette :')) {
+    // Collect potential titles (short lines at the beginning, capitalized)
+    if (section === 'header' && i < 10 && line.length > 3 && line.length < 80) {
+      // Skip common non-title patterns
+      if (!lowerLine.includes('recette') || lowerLine.match(/^recette\s+(de|:)/i)) {
         if (line.match(/^[A-ZÀÂÄÉÈÊËÏÎÔÙÛÜŸÇ]/)) {
-          name = line.replace(/^recette\s*(de|:)?\s*/i, '').trim()
+          // Skip descriptive sentences (contains "vous", "vos", "ce", "cette", "saura", etc.)
+          if (!lowerLine.match(/\b(vous|vos|ce|cette|ces|saura|ravir|magnifique|délicieux|parfait|idéal)\b/)) {
+            titleCandidates.push(line)
+          }
         }
       }
     }
@@ -114,6 +119,11 @@ function parseRecipeFromOCR(text: string) {
     // Detect ingredients section
     if (lowerLine.includes('ingrédient') || lowerLine.includes('ingredient')) {
       section = 'ingredients'
+      // Take the best title candidate before ingredients section
+      if (titleCandidates.length > 0) {
+        // Prefer shorter titles (usually the actual recipe name)
+        name = titleCandidates.sort((a, b) => a.length - b.length)[0]
+      }
       continue
     }
     
@@ -123,7 +133,8 @@ function parseRecipeFromOCR(text: string) {
       lowerLine.includes('preparation') ||
       lowerLine.includes('étapes') ||
       lowerLine.includes('etapes') ||
-      lowerLine.includes('instructions')
+      lowerLine.includes('instructions') ||
+      lowerLine.includes('réalisation')
     ) {
       section = 'steps'
       continue
@@ -148,8 +159,18 @@ function parseRecipeFromOCR(text: string) {
     
     // Parse ingredients
     if (section === 'ingredients' && line.length > 2) {
+      // Detect if we've moved to steps (numbered lines)
+      if (line.match(/^(\d+)[.\s)]+/)) {
+        section = 'steps'
+        const stepMatch = line.match(/^(\d+)[.\s)]+(.+)/)
+        if (stepMatch) {
+          stepBuffer.push(stepMatch[2].trim())
+        }
+        continue
+      }
+      
       // Skip section headers
-      if (lowerLine.includes('préparation') || lowerLine.includes('étape')) {
+      if (lowerLine.includes('préparation') || lowerLine.includes('étape') || lowerLine.includes('réalisation')) {
         section = 'steps'
         continue
       }
@@ -198,6 +219,11 @@ function parseRecipeFromOCR(text: string) {
     if (stepLines.length > 0) {
       steps = stepLines
     }
+  }
+  
+  // Fallback: if no title was found, take first candidate
+  if (name === 'Recette importée' && titleCandidates.length > 0) {
+    name = titleCandidates[0]
   }
   
   return {
