@@ -229,6 +229,30 @@ export default function RecipesTab() {
     setImportPreviewData({ ...importPreviewData, ingredients: updated })
   }
 
+  const updatePreviewStep = (index: number, value: string) => {
+    if (!importPreviewData) return
+    
+    const updated = [...importPreviewData.steps]
+    updated[index] = value
+    setImportPreviewData({ ...importPreviewData, steps: updated })
+  }
+
+  const removePreviewStep = (index: number) => {
+    if (!importPreviewData) return
+    
+    const updated = importPreviewData.steps.filter((_: any, i: number) => i !== index)
+    setImportPreviewData({ ...importPreviewData, steps: updated })
+  }
+
+  const addPreviewStep = () => {
+    if (!importPreviewData) return
+    
+    setImportPreviewData({
+      ...importPreviewData,
+      steps: [...importPreviewData.steps, '']
+    })
+  }
+
   const handlePhotoImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -1016,27 +1040,56 @@ export default function RecipesTab() {
               </div>
 
               <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl text-sm text-orange-800 dark:text-orange-200">
-                ⚠️ Vérifiez et corrigez les ingrédients avant de valider l'import
+                ⚠️ Vérifiez et corrigez toutes les informations avant de valider l'import
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
-                    {importPreviewData.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    {importPreviewData.duration} min • {importPreviewData.servings} personnes
-                  </p>
+              <div className="space-y-6">
+                {/* Recipe Info */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Nom de la recette
+                    </label>
+                    <input
+                      type="text"
+                      value={importPreviewData.name}
+                      onChange={(e) => setImportPreviewData({ ...importPreviewData, name: e.target.value })}
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Durée (min)
+                      </label>
+                      <input
+                        type="number"
+                        value={importPreviewData.duration}
+                        onChange={(e) => setImportPreviewData({ ...importPreviewData, duration: parseInt(e.target.value) || 30 })}
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Portions
+                      </label>
+                      <input
+                        type="number"
+                        value={importPreviewData.servings}
+                        onChange={(e) => setImportPreviewData({ ...importPreviewData, servings: parseInt(e.target.value) || 4 })}
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
+                      />
+                    </div>
+                  </div>
                 </div>
 
+                {/* Ingredients */}
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     Ingrédients ({importPreviewData.ingredients?.length || 0})
-                    <span className="text-xs font-normal text-gray-500">
-                      Modifiez si nécessaire
-                    </span>
                   </h4>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
                     {importPreviewData.ingredients?.map((ing: any, idx: number) => (
                       <div key={idx} className="flex gap-2 items-center bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg">
                         <input
@@ -1080,6 +1133,41 @@ export default function RecipesTab() {
                         </select>
                         <button
                           onClick={() => removePreviewIngredient(idx)}
+                          className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Steps */}
+                <div>
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    Étapes ({importPreviewData.steps?.length || 0})
+                    <button
+                      onClick={addPreviewStep}
+                      className="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                    >
+                      + Ajouter
+                    </button>
+                  </h4>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {importPreviewData.steps?.map((step: string, idx: number) => (
+                      <div key={idx} className="flex gap-2 items-start bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg">
+                        <span className="text-sm font-medium text-gray-500 mt-2 min-w-[20px]">
+                          {idx + 1}.
+                        </span>
+                        <textarea
+                          value={step}
+                          onChange={(e) => updatePreviewStep(idx, e.target.value)}
+                          className="flex-1 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                          rows={2}
+                          placeholder="Étape..."
+                        />
+                        <button
+                          onClick={() => removePreviewStep(idx)}
                           className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
                         >
                           <X className="w-4 h-4" />
