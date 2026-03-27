@@ -111,7 +111,7 @@ export default function RecipesTab() {
       
       setIngredientMatches(matches)
     }
-  }, [importPreviewData, items])
+  }, [importPreviewData, pantryItems])
 
   const usedCategories = Array.from(new Set(
     recipes.flatMap(r => r.tags.filter(t => RECIPE_CATEGORIES.includes(t)))
