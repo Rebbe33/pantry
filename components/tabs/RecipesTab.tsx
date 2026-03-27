@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { getRecipeIngredients, hasEnoughIngredient } from '@/lib/recipe-helpers'
+import { matchIngredientWithPantry, getSuggestionsForIngredient, cleanIngredientForMatching } from '@/lib/ingredient-matcher'
 import { 
   Plus, 
   Search, 
@@ -64,6 +65,7 @@ export default function RecipesTab() {
   const [showCookingMode, setShowCookingMode] = useState(false)
   const [showImportPreview, setShowImportPreview] = useState(false)
   const [importPreviewData, setImportPreviewData] = useState<any>(null)
+  const [ingredientMatches, setIngredientMatches] = useState<Map<number, any>>(new Map())
   const [currentStep, setCurrentStep] = useState(0)
   const [importUrl, setImportUrl] = useState('')
   const [isImporting, setIsImporting] = useState(false)
@@ -89,6 +91,27 @@ export default function RecipesTab() {
     const matchesCategory = selectedCategory === 'all' || recipe.tags.includes(selectedCategory)
     return matchesSearch && matchesCategory
   })
+
+  // Match ingredients with pantry when preview data changes
+  useEffect(() => {
+    if (importPreviewData && importPreviewData.ingredients) {
+      const matches = new Map()
+      
+      importPreviewData.ingredients.forEach((ing: any, idx: number) => {
+        const match = matchIngredientWithPantry(ing.name, items)
+        const suggestions = match ? [] : getSuggestionsForIngredient(ing.name, items)
+        
+        matches.set(idx, {
+          match, // Matched pantry item or null
+          suggestions, // Suggested items if no match
+          originalName: ing.name,
+          cleanedName: cleanIngredientForMatching(ing.name)
+        })
+      })
+      
+      setIngredientMatches(matches)
+    }
+  }, [importPreviewData, items])
 
   const usedCategories = Array.from(new Set(
     recipes.flatMap(r => r.tags.filter(t => RECIPE_CATEGORIES.includes(t)))
@@ -1088,38 +1111,108 @@ export default function RecipesTab() {
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     Ingrédients ({importPreviewData.ingredients?.length || 0})
+                    <span className="text-xs font-normal text-gray-500">
+                      ✓ = Match trouvé dans l'inventaire
+                    </span>
                   </h4>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {importPreviewData.ingredients?.map((ing: any, idx: number) => (
-                      <div key={idx} className="flex gap-2 items-center bg-gray-50 dark:bg-gray-700/50 p-2 rounded-lg">
-                        <input
-                          type="text"
-                          value={ing.name}
-                          onChange={(e) => updatePreviewIngredient(idx, 'name', e.target.value)}
-                          className="flex-1 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
-                          placeholder="Nom"
-                        />
-                        <input
-                          type="number"
-                          value={ing.quantity}
-                          onChange={(e) => updatePreviewIngredient(idx, 'quantity', parseFloat(e.target.value) || 1)}
-                          className="w-20 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
-                          placeholder="Qté"
-                        />
-                        <select
-                          value={ing.unit}
-                          onChange={(e) => updatePreviewIngredient(idx, 'unit', e.target.value)}
-                          className="w-24 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
-                        >
-                          <option value="g">g</option>
-                          <option value="kg">kg</option>
-                          <option value="ml">ml</option>
-                          <option value="l">l</option>
-                          <option value="cl">cl</option>
-                          <option value="pièce(s)">pièce(s)</option>
-                          <option value="c. à soupe">c. à soupe</option>
-                          <option value="c. à café">c. à café</option>
-                          <option value="gousse(s)">gousse(s)</option>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {importPreviewData.ingredients?.map((ing: any, idx: number) => {
+                      const matchInfo = ingredientMatches.get(idx)
+                      const hasMatch = matchInfo?.match
+                      const hasSuggestions = matchInfo?.suggestions?.length > 0
+                      
+                      return (
+                        <div key={idx} className="space-y-1">
+                          <div className={`flex gap-2 items-center p-2 rounded-lg ${
+                            hasMatch 
+                              ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
+                              : 'bg-gray-50 dark:bg-gray-700/50'
+                          }`}>
+                            {/* Match indicator */}
+                            {hasMatch && (
+                              <div className="flex-shrink-0 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                <Check className="w-4 h-4 text-white" />
+                              </div>
+                            )}
+                            
+                            <input
+                              type="text"
+                              value={ing.name}
+                              onChange={(e) => updatePreviewIngredient(idx, 'name', e.target.value)}
+                              className="flex-1 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                              placeholder="Nom"
+                            />
+                            <input
+                              type="number"
+                              value={ing.quantity}
+                              onChange={(e) => updatePreviewIngredient(idx, 'quantity', parseFloat(e.target.value) || 1)}
+                              className="w-20 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                              placeholder="Qté"
+                            />
+                            <select
+                              value={ing.unit}
+                              onChange={(e) => updatePreviewIngredient(idx, 'unit', e.target.value)}
+                              className="w-24 px-2 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded text-sm"
+                            >
+                              <option value="g">g</option>
+                              <option value="kg">kg</option>
+                              <option value="ml">ml</option>
+                              <option value="l">l</option>
+                              <option value="cl">cl</option>
+                              <option value="pièce(s)">pièce(s)</option>
+                              <option value="c. à soupe">c. à soupe</option>
+                              <option value="c. à café">c. à café</option>
+                              <option value="gousse(s)">gousse(s)</option>
+                              <option value="brin(s)">brin(s)</option>
+                              <option value="tranche(s)">tranche(s)</option>
+                              <option value="pincée(s)">pincée(s)</option>
+                              <option value="botte(s)">botte(s)</option>
+                              <option value="pot(s)">pot(s)</option>
+                              <option value="sachet(s)">sachet(s)</option>
+                              <option value="filet(s)">filet(s)</option>
+                              <option value="noix">noix</option>
+                              <option value="verre">verre</option>
+                              <option value="tasse">tasse</option>
+                            </select>
+                            <button
+                              onClick={() => removePreviewIngredient(idx)}
+                              className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          
+                          {/* Match info */}
+                          {hasMatch && (
+                            <div className="pl-8 text-xs text-green-700 dark:text-green-300">
+                              → Match avec "{matchInfo.match.name}" dans {matchInfo.match.location}
+                            </div>
+                          )}
+                          
+                          {/* Suggestions for unmatched */}
+                          {!hasMatch && hasSuggestions && (
+                            <div className="pl-8">
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                                Suggestions:
+                              </p>
+                              <div className="flex gap-1 flex-wrap">
+                                {matchInfo.suggestions.map((suggestion: any) => (
+                                  <button
+                                    key={suggestion.id}
+                                    onClick={() => updatePreviewIngredient(idx, 'name', suggestion.name)}
+                                    className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50"
+                                  >
+                                    {suggestion.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
                           <option value="brin(s)">brin(s)</option>
                           <option value="tranche(s)">tranche(s)</option>
                           <option value="pincée(s)">pincée(s)</option>
