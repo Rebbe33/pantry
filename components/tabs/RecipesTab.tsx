@@ -98,7 +98,7 @@ export default function RecipesTab() {
       const matches = new Map()
       
       importPreviewData.ingredients.forEach((ing: any, idx: number) => {
-        const match = matchIngredientWithPantry(ing.name, items)
+        const match = matchIngredientWithPantry(ing.name, pantryItems)
         const suggestions = match ? [] : getSuggestionsForIngredient(ing.name, items)
         
         matches.set(idx, {
