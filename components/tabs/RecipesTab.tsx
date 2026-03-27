@@ -1211,28 +1211,7 @@ export default function RecipesTab() {
                     })}
                   </div>
                 </div>
-                          <option value="brin(s)">brin(s)</option>
-                          <option value="tranche(s)">tranche(s)</option>
-                          <option value="pincée(s)">pincée(s)</option>
-                          <option value="botte(s)">botte(s)</option>
-                          <option value="pot(s)">pot(s)</option>
-                          <option value="sachet(s)">sachet(s)</option>
-                          <option value="filet(s)">filet(s)</option>
-                          <option value="noix">noix</option>
-                          <option value="verre">verre</option>
-                          <option value="tasse">tasse</option>
-                        </select>
-                        <button
-                          onClick={() => removePreviewIngredient(idx)}
-                          className="p-1 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
+                         
                 {/* Steps */}
                 <div>
                   <h4 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
