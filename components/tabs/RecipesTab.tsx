@@ -831,8 +831,6 @@ export default function RecipesTab() {
         </div>
       )}
 
-      {/* Modals suivent... (trop long pour un seul message, je continue) */}
-
       {/* Recipe Detail Modal */}
       <AnimatePresence>
         {selectedRecipe && selected && !showCookingMode && (
